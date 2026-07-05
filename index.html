@@ -1,0 +1,1308 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
+
+    <title>安心血壓</title>
+
+    <!-- iPhone PWA -->
+
+    <meta
+        name="apple-mobile-web-app-capable"
+        content="yes">
+
+    <meta
+        name="apple-mobile-web-app-status-bar-style"
+        content="default">
+
+    <meta
+        name="apple-mobile-web-app-title"
+        content="安心血壓">
+
+    <meta
+        name="theme-color"
+        content="#F5F5F7">
+
+    <meta
+        name="format-detection"
+        content="telephone=no">
+
+    <!-- PWA -->
+
+    <link
+        rel="manifest"
+        href="manifest.json">
+
+    <!-- CSS -->
+
+    <link
+        rel="stylesheet"
+        href="css/style.css">
+
+</head>
+
+<body>
+
+<div id="app">
+
+    <!-- ========================= -->
+    <!-- Header -->
+    <!-- ========================= -->
+
+    <header class="header">
+
+        <div
+            id="currentTime"
+            class="current-time">
+
+            上午 08:35
+
+        </div>
+
+    </header>
+
+    <!-- ========================= -->
+    <!-- Main -->
+    <!-- ========================= -->
+
+    <main>
+
+        <!-- ===================== -->
+        <!-- Home -->
+        <!-- ===================== -->
+
+        <section
+            id="page-home"
+            class="page active">
+
+            <!-- ===================== -->
+            <!-- 今日最後一次量測 -->
+            <!-- ===================== -->
+
+            <div
+                id="todayGreeting"
+                class="today-greeting">
+
+                親愛的使用者，早安~
+
+            </div>
+
+            <article
+                id="todayCard"
+                class="today-card"
+                aria-live="polite">
+
+                <div class="today-card-header">
+
+                    <div
+                        id="todayTitle"
+                        class="today-title">
+
+                        上次量測
+
+                    </div>
+
+                    <div
+                        id="todayTime"
+                        class="today-time">
+
+                        --
+
+                    </div>
+
+                    <div
+                        id="todayStatus"
+                        class="today-status is-empty">
+
+                        --
+
+                    </div>
+
+                </div>
+
+                <div class="today-metrics">
+
+                    <div class="today-metric">
+
+                        <div
+                            id="todaySys"
+                            class="today-metric-value">
+
+                            --
+
+                        </div>
+
+                    </div>
+
+                    <div class="today-metric">
+
+                        <div
+                            id="todayDia"
+                            class="today-metric-value">
+
+                            --
+
+                        </div>
+
+                    </div>
+
+                    <div class="today-metric today-pulse-metric">
+
+                        <div
+                            id="todayPulse"
+                            class="today-metric-value">
+
+                            --
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </article>
+
+            <!-- 收縮壓 -->
+
+            <article
+                class="bp-card sys-card"
+                data-input="sys">
+
+                <div class="bp-card-layout">
+
+                    <div class="card-side">
+
+                        <div class="card-title">
+
+                            收縮壓
+
+                        </div>
+
+                        <div class="card-subtitle">
+
+                            高壓
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-input-wrap">
+
+                        <input
+
+                            id="sys"
+
+                            class="bp-input"
+
+                            type="text"
+
+                            inputmode="numeric"
+
+                            pattern="[0-9]*"
+
+                            enterkeyhint="next"
+
+                            autocomplete="off"
+
+                            maxlength="3"
+
+                            aria-label="收縮壓">
+
+                    </div>
+
+                </div>
+
+            </article>
+
+            <!-- 舒張壓 -->
+
+            <article
+                class="bp-card dia-card"
+                data-input="dia">
+
+                <div class="bp-card-layout">
+
+                    <div class="card-side">
+
+                        <div class="card-title">
+
+                            舒張壓
+
+                        </div>
+
+                        <div class="card-subtitle">
+
+                            低壓
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-input-wrap">
+
+                        <input
+
+                            id="dia"
+
+                            class="bp-input"
+
+                            type="text"
+
+                            inputmode="numeric"
+
+                            pattern="[0-9]*"
+
+                            enterkeyhint="next"
+
+                            autocomplete="off"
+
+                            maxlength="3"
+
+                            aria-label="舒張壓">
+
+                    </div>
+
+                </div>
+
+            </article>
+                        <!-- ===================== -->
+            <!-- 脈搏 -->
+            <!-- ===================== -->
+
+            <article
+                class="bp-card pulse-card"
+                data-input="pulse">
+
+                <div class="bp-card-layout pulse-card-layout">
+
+                    <div class="card-side">
+
+                        <div class="card-title">
+
+                            脈搏
+
+                        </div>
+
+                        <div class="card-subtitle">
+
+                            BPM
+
+                        </div>
+
+                    </div>
+
+                    <div class="card-input-wrap">
+
+                        <input
+
+                            id="pulse"
+
+                            class="bp-input"
+
+                            type="text"
+
+                            inputmode="numeric"
+
+                            pattern="[0-9]*"
+
+                            enterkeyhint="done"
+
+                            autocomplete="off"
+
+                            maxlength="3"
+
+                            aria-label="脈搏">
+
+                    </div>
+
+                    <button
+                        id="ihbBtn"
+                        class="ihb-btn"
+                        type="button"
+                        aria-label="不規則心跳"
+                        aria-pressed="false">
+
+                        <img
+                            src="assets/ihb.svg"
+                            alt="">
+
+                    </button>
+
+                </div>
+
+            </article>
+
+            <!-- ===================== -->
+            <!-- 儲存 -->
+            <!-- ===================== -->
+
+            <button
+                id="saveBtn"
+                class="save-btn"
+                type="button">
+
+                儲存紀錄
+
+            </button>
+
+        </section>
+
+        <!-- ===================== -->
+        <!-- 紀錄頁 -->
+        <!-- ===================== -->
+
+        <section
+            id="page-history"
+            class="page">
+
+            <section
+                class="history-filters"
+                aria-label="快速篩選">
+
+                <div class="history-filter-group history-filter-group-scroll">
+
+                    <button
+                        class="history-filter-chip active"
+                        type="button"
+                        data-filter-type="period"
+                        data-filter-value="all"
+                        aria-pressed="true">
+
+                        全部
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="period"
+                        data-filter-value="清晨">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M7 15a5 5 0 0 1 10 0"/><path d="M12 5v4"/><path d="m5.5 10.5 2.1 2.1"/><path d="m18.5 10.5-2.1 2.1"/></svg><span>清晨</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="period"
+                        data-filter-value="上午">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4 12H2"/><path d="M22 12h-2"/><path d="m5 5 1.5 1.5"/><path d="m17.5 17.5L19 19"/><path d="m19 5-1.5 1.5"/><path d="m6.5 17.5L5 19"/></svg><span>上午</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="period"
+                        data-filter-value="下午">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M7 15a5 5 0 0 1 10 0"/><path d="M12 9v2"/><path d="M4 12h2"/><path d="M18 12h2"/></svg><span>下午</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="period"
+                        data-filter-value="晚上">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 7 7 0 1 0 20 15.5Z"/></svg><span>晚上</span>
+
+                    </button>
+
+                </div>
+
+                <div class="history-filter-group">
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="range"
+                        data-filter-value="7">
+
+                        7 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="range"
+                        data-filter-value="30">
+
+                        30 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip"
+                        type="button"
+                        data-filter-type="range"
+                        data-filter-value="90">
+
+                        90 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip active"
+                        type="button"
+                        data-filter-type="range"
+                        data-filter-value="all"
+                        aria-pressed="true">
+
+                        全部
+
+                    </button>
+
+                    <button
+                        id="historyAdvancedToggle"
+                        class="history-filter-chip history-advanced-toggle"
+                        type="button"
+                        aria-expanded="false"
+                        aria-controls="historyAdvancedFilters">
+
+                        自訂
+
+                    </button>
+
+                </div>
+
+                <section
+                    id="historyAdvancedFilters"
+                    class="history-advanced-filters"
+                    hidden
+                    aria-label="自訂篩選">
+
+                    <div class="history-filter-dates">
+
+                        <label class="history-date-field">
+
+                            <span class="history-field-label">
+
+                                開始日期
+
+                            </span>
+
+                            <input
+                                id="historyStartDate"
+                                class="history-date-input"
+                                type="date">
+
+                        </label>
+
+                        <label class="history-date-field">
+
+                            <span class="history-field-label">
+
+                                結束日期
+
+                            </span>
+
+                            <input
+                                id="historyEndDate"
+                                class="history-date-input"
+                                type="date">
+
+                        </label>
+
+                    </div>
+
+                    <div class="history-filter-group">
+
+                        <button
+                            class="history-filter-chip history-status-chip"
+                            type="button"
+                            data-filter-type="status"
+                            data-filter-value="ideal">
+
+                            <span class="status-dot status-dot-ideal" aria-hidden="true"></span><span>理想</span>
+
+                        </button>
+
+                        <button
+                            class="history-filter-chip history-status-chip"
+                            type="button"
+                            data-filter-type="status"
+                            data-filter-value="info">
+
+                            <span class="status-dot status-dot-info" aria-hidden="true"></span><span>前期</span>
+
+                        </button>
+
+                        <button
+                            class="history-filter-chip history-status-chip"
+                            type="button"
+                            data-filter-type="status"
+                            data-filter-value="caution">
+
+                            <span class="status-dot status-dot-caution" aria-hidden="true"></span><span>一期</span>
+
+                        </button>
+
+                        <button
+                            class="history-filter-chip history-status-chip"
+                            type="button"
+                            data-filter-type="status"
+                            data-filter-value="high">
+
+                            <span class="status-dot status-dot-high" aria-hidden="true"></span><span>二期</span>
+
+                        </button>
+
+                    </div>
+
+                </section>
+
+            </section>
+
+            <div
+                id="historyList"
+                class="history-list">
+
+                <!-- JavaScript 動態產生 -->
+
+            </div>
+
+        </section>
+
+        <!-- ===================== -->
+        <!-- 趨勢頁 -->
+        <!-- ===================== -->
+
+        <section
+            id="page-chart"
+            class="page">
+
+            <section
+                class="chart-filters"
+                aria-label="趨勢範圍">
+
+                <div class="chart-filter-group chart-filter-group-scroll">
+
+                    <button
+                        class="history-filter-chip chart-filter-chip active"
+                        type="button"
+                        data-chart-period="all"
+                        aria-pressed="true">
+
+                        全部
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-period="清晨">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M7 15a5 5 0 0 1 10 0"/><path d="M12 5v4"/><path d="m5.5 10.5 2.1 2.1"/><path d="m18.5 10.5-2.1 2.1"/></svg><span>清晨</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-period="上午">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="M4 12H2"/><path d="M22 12h-2"/><path d="m5 5 1.5 1.5"/><path d="m17.5 17.5L19 19"/><path d="m19 5-1.5 1.5"/><path d="m6.5 17.5L5 19"/></svg><span>上午</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-period="下午">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18h16"/><path d="M7 15a5 5 0 0 1 10 0"/><path d="M12 9v2"/><path d="M4 12h2"/><path d="M18 12h2"/></svg><span>下午</span>
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-period="晚上">
+
+                        <svg class="chip-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 15.5A8.5 8.5 0 0 1 8.5 4 7 7 0 1 0 20 15.5Z"/></svg><span>晚上</span>
+
+                    </button>
+
+                </div>
+
+                <div class="chart-filter-group">
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-range="7">
+
+                        7 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip active"
+                        type="button"
+                        data-chart-range="30"
+                        aria-pressed="true">
+
+                        30 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-range="90">
+
+                        90 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-range="180">
+
+                        180 天
+
+                    </button>
+
+                    <button
+                        class="history-filter-chip chart-filter-chip"
+                        type="button"
+                        data-chart-range="365">
+
+                        365 天
+
+                    </button>
+
+                </div>
+
+            </section>
+
+            <section
+                class="chart-summary"
+                aria-label="趨勢摘要">
+
+                <div class="chart-summary-card">
+
+                    <div class="chart-summary-header">
+
+                        <div class="chart-summary-eyebrow">
+
+                            Trend Dashboard
+
+                        </div>
+
+                        <div class="chart-summary-title">
+
+                            趨勢摘要
+
+                        </div>
+
+                    </div>
+
+                    <div class="chart-summary-groups">
+
+                        <div class="chart-summary-group">
+
+                            <div class="chart-summary-group-label">
+
+                                今日平均
+
+                            </div>
+
+                            <div class="chart-summary-metrics">
+
+                                <div
+                                    id="chartTodaySys"
+                                    class="history-metric history-summary-metric history-metric-sys chart-summary-metric"
+                                    aria-label="今日平均收縮壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartTodayDia"
+                                    class="history-metric history-summary-metric history-metric-dia chart-summary-metric"
+                                    aria-label="今日平均舒張壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartTodayPulse"
+                                    class="history-metric history-summary-metric history-metric-pulse chart-summary-metric"
+                                    aria-label="今日平均脈搏">
+
+                                    --
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="chart-summary-group">
+
+                            <div class="chart-summary-group-label">
+
+                                本週平均
+
+                            </div>
+
+                            <div class="chart-summary-metrics">
+
+                                <div
+                                    id="chartWeekSys"
+                                    class="history-metric history-summary-metric history-metric-sys chart-summary-metric"
+                                    aria-label="本週平均收縮壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartWeekDia"
+                                    class="history-metric history-summary-metric history-metric-dia chart-summary-metric"
+                                    aria-label="本週平均舒張壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartWeekPulse"
+                                    class="history-metric history-summary-metric history-metric-pulse chart-summary-metric"
+                                    aria-label="本週平均脈搏">
+
+                                    --
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                        <div class="chart-summary-group">
+
+                            <div class="chart-summary-group-label">
+
+                                本月平均
+
+                            </div>
+
+                            <div class="chart-summary-metrics">
+
+                                <div
+                                    id="chartMonthSys"
+                                    class="history-metric history-summary-metric history-metric-sys chart-summary-metric"
+                                    aria-label="本月平均收縮壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartMonthDia"
+                                    class="history-metric history-summary-metric history-metric-dia chart-summary-metric"
+                                    aria-label="本月平均舒張壓">
+
+                                    --
+
+                                </div>
+
+                                <div
+                                    id="chartMonthPulse"
+                                    class="history-metric history-summary-metric history-metric-pulse chart-summary-metric"
+                                    aria-label="本月平均脈搏">
+
+                                    --
+
+                                </div>
+
+                            </div>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section
+                class="chart-stats"
+                aria-label="統計資訊">
+
+                <div class="chart-stats-grid">
+
+                    <div class="chart-stat-card">
+
+                        <div class="chart-stat-label">
+
+                            量測次數
+
+                        </div>
+
+                        <div
+                            id="chartCount"
+                            class="chart-stat-value">
+
+                            0
+
+                        </div>
+
+                    </div>
+
+                    <div class="chart-stat-card">
+
+                        <div class="chart-stat-label">
+
+                            最高
+
+                        </div>
+
+                        <div class="chart-stat-triplet">
+
+                            <span id="chartMaxSys">--</span>
+                            <span id="chartMaxDia">--</span>
+                            <span id="chartMaxPulse">--</span>
+
+                        </div>
+
+                    </div>
+
+                    <div class="chart-stat-card">
+
+                        <div class="chart-stat-label">
+
+                            最低
+
+                        </div>
+
+                        <div class="chart-stat-triplet">
+
+                            <span id="chartMinSys">--</span>
+                            <span id="chartMinDia">--</span>
+                            <span id="chartMinPulse">--</span>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="chartStatusSummary"
+                    class="history-status-summary chart-status-summary">
+
+                </div>
+
+            </section>
+
+            <section
+                class="history-legend chart-legend"
+                aria-label="趨勢圖例">
+
+                <div class="history-legend-item">
+
+                    <span class="history-legend-swatch history-legend-swatch-sys" aria-hidden="true"></span>
+                    <span>收縮壓</span>
+
+                </div>
+
+                <div class="history-legend-item">
+
+                    <span class="history-legend-swatch history-legend-swatch-dia" aria-hidden="true"></span>
+                    <span>舒張壓</span>
+
+                </div>
+
+                <div class="history-legend-item">
+
+                    <span class="history-legend-swatch history-legend-swatch-pulse" aria-hidden="true"></span>
+                    <span>脈搏</span>
+
+                </div>
+
+            </section>
+
+            <div
+                class="chart-container">
+
+                <canvas
+                    id="chartCanvas">
+
+                </canvas>
+
+            </div>
+
+        </section>
+
+        <section
+            id="page-settings"
+            class="page">
+
+            <div class="page-title">
+
+                設定
+
+            </div>
+
+            <section
+                class="settings-card"
+                aria-label="使用者設定">
+
+                <div class="settings-card-header">
+
+                    <div class="settings-card-eyebrow">
+
+                        Account
+
+                    </div>
+
+                    <div class="settings-card-title">
+
+                        連線與使用者
+
+                    </div>
+
+                </div>
+
+                <div class="settings-card-subtitle">
+
+                    可設定 GitHub 掛網頁使用的 Apps Script 網址，並選擇或手動輸入目前使用者姓名。
+
+                </div>
+
+                <div class="settings-form">
+
+                    <label class="settings-field">
+
+                        <span class="settings-label">
+
+                            Apps Script 網址
+
+                        </span>
+
+                        <input
+                            id="settingsApiUrl"
+                            class="settings-input"
+                            type="url"
+                            inputmode="url"
+                            autocomplete="off"
+                            placeholder="https://script.google.com/macros/s/.../exec">
+
+                    </label>
+
+                    <label class="settings-field">
+
+                        <span class="settings-label">
+
+                            使用者姓名
+
+                        </span>
+
+                        <input
+                            id="settingsUserName"
+                            class="settings-input"
+                            type="text"
+                            list="settingsUserOptions"
+                            autocomplete="off"
+                            placeholder="可手動輸入或從名單選擇">
+
+                        <datalist id="settingsUserOptions"></datalist>
+
+                    </label>
+
+                    <div class="settings-actions">
+
+                        <button
+                            id="settingsReloadUsers"
+                            class="settings-secondary-btn"
+                            type="button">
+
+                            重新載入姓名
+
+                        </button>
+
+                        <button
+                            id="settingsSaveBtn"
+                            class="settings-primary-btn"
+                            type="button">
+
+                            儲存設定
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+            </section>
+
+            <section
+                class="settings-card"
+                aria-label="燈號規則">
+
+                <div class="settings-card-header">
+
+                    <div class="settings-card-eyebrow">
+
+                        Blood Pressure Guide
+
+                    </div>
+
+                    <div class="settings-card-title">
+
+                        燈號規則
+
+                    </div>
+
+                </div>
+
+                <div class="settings-card-subtitle">
+
+                    提供目前血壓燈號的判斷區間與提示文字，方便快速理解每一筆紀錄的狀態。
+
+                </div>
+
+                <div class="settings-status-list">
+
+                    <div class="settings-status-item">
+
+                        <div class="settings-status-main">
+
+                            <span class="status-dot status-dot-ideal" aria-hidden="true"></span>
+                            <span class="settings-status-name">理想</span>
+
+                        </div>
+
+                        <div class="settings-status-rule">
+
+                            SYS ≤ 120 且 DIA ≤ 80
+
+                        </div>
+
+                    </div>
+
+                    <div class="settings-status-item">
+
+                        <div class="settings-status-main">
+
+                            <span class="status-dot status-dot-info" aria-hidden="true"></span>
+                            <span class="settings-status-name">前期</span>
+
+                        </div>
+
+                        <div class="settings-status-rule">
+
+                            SYS &lt; 140 且 DIA &lt; 90
+
+                        </div>
+
+                    </div>
+
+                    <div class="settings-status-item">
+
+                        <div class="settings-status-main">
+
+                            <span class="status-dot status-dot-caution" aria-hidden="true"></span>
+                            <span class="settings-status-name">一期</span>
+
+                        </div>
+
+                        <div class="settings-status-rule">
+
+                            SYS &lt; 160 且 DIA &lt; 100
+
+                        </div>
+
+                    </div>
+
+                    <div class="settings-status-item">
+
+                        <div class="settings-status-main">
+
+                            <span class="status-dot status-dot-high" aria-hidden="true"></span>
+                            <span class="settings-status-name">二期</span>
+
+                        </div>
+
+                        <div class="settings-status-rule">
+
+                            SYS ≥ 160 或 DIA ≥ 100
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+                <div class="settings-note">
+
+                    以較高的 SYS 或 DIA 為主進行判定；若任一數值進入較高區間，會顯示對應燈號。
+
+                </div>
+
+            </section>
+
+        </section>
+
+    </main>
+            <!-- ===================== -->
+        <!-- Toast -->
+        <!-- ===================== -->
+
+        <div
+            id="toast"
+            class="toast"
+            aria-live="polite">
+
+            <div class="toast-icon">
+
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+
+            </div>
+
+            <div class="toast-message">
+
+                已儲存紀錄
+
+            </div>
+
+        </div>
+
+        <!-- ===================== -->
+        <!-- Loading -->
+        <!-- ===================== -->
+
+        <div
+            id="loadingOverlay"
+            class="loading-overlay hidden">
+
+            <div class="loading-card">
+
+                <div class="spinner"></div>
+
+                <div class="loading-text">
+
+                    儲存中...
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </div>
+
+    <!-- ========================= -->
+    <!-- Bottom Tab Bar -->
+    <!-- ========================= -->
+
+    <nav
+        class="tabbar"
+        aria-label="主要功能">
+
+        <button
+            class="tab active"
+            data-page="home"
+            aria-label="今日"
+            type="button">
+
+            <div class="tab-icon">
+
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20.8 11.1 12 3.8 3.2 11.1"/><path d="M5.5 10.2V20h13v-9.8"/><path d="M9.5 20v-6h5v6"/></svg>
+
+            </div>
+
+            <div class="tab-text">
+
+                今日
+
+            </div>
+
+        </button>
+
+        <button
+            class="tab"
+            data-page="history"
+            aria-label="紀錄"
+            type="button">
+
+            <div class="tab-icon">
+
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="4" width="14" height="16" rx="3"/><path d="M9 8h6"/><path d="M9 12h6"/><path d="M9 16h4"/></svg>
+
+            </div>
+
+            <div class="tab-text">
+
+                紀錄
+
+            </div>
+
+        </button>
+
+        <button
+            class="tab"
+            data-page="chart"
+            aria-label="趨勢"
+            type="button">
+
+            <div class="tab-icon">
+
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 19V5"/><path d="M4 19h16"/><path d="m7 15 3.2-3.2 2.7 2.7L18 8"/></svg>
+
+            </div>
+
+            <div class="tab-text">
+
+                趨勢
+
+            </div>
+
+        </button>
+
+        <button
+            class="tab"
+            data-page="settings"
+            aria-label="設定"
+            type="button">
+
+            <div class="tab-icon">
+
+                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v3"/><path d="M12 18v3"/><path d="m4.93 4.93 2.12 2.12"/><path d="m16.95 16.95 2.12 2.12"/><path d="M3 12h3"/><path d="M18 12h3"/><path d="m4.93 19.07 2.12-2.12"/><path d="m16.95 7.05 2.12-2.12"/><circle cx="12" cy="12" r="3.5"/></svg>
+
+            </div>
+
+            <div class="tab-text">
+
+                設定
+
+            </div>
+
+        </button>
+
+    </nav>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="js/api.js"></script>
+    <script src="js/history.js"></script>
+    <script src="js/chart.js"></script>
+    <script src="js/app.js"></script>    
+
+</body>
+</html>
