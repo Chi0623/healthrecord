@@ -878,7 +878,7 @@ const History = {
         }
 
         return {
-            label: "理想",
+            label: "正常",
             className: ""
         };
 
@@ -910,32 +910,38 @@ const History = {
 
         const partsByType = {
             dawn: [
-                { tag: "path", attrs: { d: "M4 18h16" } },
-                { tag: "path", attrs: { d: "M7 15a5 5 0 0 1 10 0" } },
-                { tag: "path", attrs: { d: "M12 5v4" } },
-                { tag: "path", attrs: { d: "m5.5 10.5 2.1 2.1" } },
-                { tag: "path", attrs: { d: "m18.5 10.5-2.1 2.1" } }
+                { tag: "path", attrs: { d: "M3 16c2 .8 4 .8 6 0s4-.8 6 0 4 .8 6 0" } },
+                { tag: "path", attrs: { d: "M6.5 16a5.5 5.5 0 0 1 11 0" } },
+                { tag: "path", attrs: { d: "M12 4v3" } },
+                { tag: "path", attrs: { d: "m7.4 6.1 1.4 2.4" } },
+                { tag: "path", attrs: { d: "m16.6 6.1-1.4 2.4" } },
+                { tag: "path", attrs: { d: "M4.4 10.2 7 11.7" } },
+                { tag: "path", attrs: { d: "m19.6 10.2-2.6 1.5" } }
             ],
             morning: [
-                { tag: "circle", attrs: { cx: "12", cy: "12", r: "4" } },
-                { tag: "path", attrs: { d: "M12 2v2" } },
-                { tag: "path", attrs: { d: "M12 20v2" } },
-                { tag: "path", attrs: { d: "M4 12H2" } },
-                { tag: "path", attrs: { d: "M22 12h-2" } },
-                { tag: "path", attrs: { d: "m5 5 1.5 1.5" } },
-                { tag: "path", attrs: { d: "m17.5 17.5L19 19" } },
-                { tag: "path", attrs: { d: "m19 5-1.5 1.5" } },
-                { tag: "path", attrs: { d: "m6.5 17.5L5 19" } }
+                { tag: "circle", attrs: { cx: "12", cy: "12", r: "5.5" } },
+                { tag: "path", attrs: { d: "M12 1.8v2" } },
+                { tag: "path", attrs: { d: "M12 20.2v2" } },
+                { tag: "path", attrs: { d: "M1.8 12h2" } },
+                { tag: "path", attrs: { d: "M20.2 12h2" } },
+                { tag: "path", attrs: { d: "m4.8 4.8 1.4 1.4" } },
+                { tag: "path", attrs: { d: "m17.8 17.8 1.4 1.4" } },
+                { tag: "path", attrs: { d: "m19.2 4.8-1.4 1.4" } },
+                { tag: "path", attrs: { d: "m6.2 17.8-1.4 1.4" } }
             ],
             afternoon: [
-                { tag: "path", attrs: { d: "M4 18h16" } },
-                { tag: "path", attrs: { d: "M7 15a5 5 0 0 1 10 0" } },
-                { tag: "path", attrs: { d: "M12 9v2" } },
-                { tag: "path", attrs: { d: "M4 12h2" } },
-                { tag: "path", attrs: { d: "M18 12h2" } }
+                { tag: "path", attrs: { d: "M4 15h16" } },
+                { tag: "path", attrs: { d: "M6.5 15a5.5 5.5 0 0 1 11 0" } },
+                { tag: "path", attrs: { d: "M12 4v3" } },
+                { tag: "path", attrs: { d: "m7.4 6.2 1.4 2.4" } },
+                { tag: "path", attrs: { d: "m16.6 6.2-1.4 2.4" } },
+                { tag: "path", attrs: { d: "M4.5 10.2 7 11.6" } },
+                { tag: "path", attrs: { d: "m19.5 10.2-2.5 1.4" } },
+                { tag: "path", attrs: { d: "M8 17.5h8" } },
+                { tag: "path", attrs: { d: "M9.5 20h5" } }
             ],
             night: [
-                { tag: "path", attrs: { d: "M20 15.5A8.5 8.5 0 0 1 8.5 4 7 7 0 1 0 20 15.5Z" } }
+                { tag: "path", attrs: { d: "M19.2 14.7A7.3 7.3 0 0 1 8.4 5.3a6 6 0 1 0 10.8 9.4Z" } }
             ],
             time: [
                 { tag: "circle", attrs: { cx: "12", cy: "12", r: "8" } },

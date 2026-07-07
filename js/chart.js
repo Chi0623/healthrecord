@@ -526,6 +526,13 @@ const ChartPage = {
 
         canvas.className = "chart-status-canvas";
         canvas.setAttribute("aria-label", "燈號分布圓餅圖");
+        canvas.width = 216;
+        canvas.height = 216;
+
+        const chartBox = document.createElement("div");
+
+        chartBox.className = "chart-status-chartbox";
+        chartBox.appendChild(canvas);
 
         const legend = document.createElement("div");
 
@@ -538,11 +545,12 @@ const ChartPage = {
 
         entries.forEach(item => {
 
+            const statusLabel = this.normalizeStatusLabel(item.label);
             const percent = this.getStatusPercent(item.count, summary.total);
 
             if (item.count > 0) {
 
-                labels.push(item.label);
+                labels.push(statusLabel);
                 values.push(item.count);
                 colors.push(this.getStatusColor(item.dotClass));
 
@@ -553,7 +561,7 @@ const ChartPage = {
             row.className = "history-status-item";
             row.setAttribute(
                 "aria-label",
-                `${item.label} ${item.count} 筆，${percent}%`
+                `${statusLabel} ${item.count} 筆，${percent}%`
             );
 
             const label = document.createElement("div");
@@ -563,7 +571,7 @@ const ChartPage = {
 
             const text = document.createElement("span");
 
-            text.textContent = item.label;
+            text.textContent = statusLabel;
 
             label.appendChild(text);
 
@@ -579,8 +587,8 @@ const ChartPage = {
 
         });
 
+        wrapper.appendChild(chartBox);
         wrapper.appendChild(legend);
-        wrapper.appendChild(canvas);
         this.statusSummaryElement.appendChild(wrapper);
 
         if (!values.length) {
@@ -946,7 +954,22 @@ const ChartPage = {
 
         }
 
-        element.textContent = value;
+        if (element.classList.contains("chart-summary-metric")) {
+
+            element.textContent = "";
+
+            const valueNode = document.createElement("div");
+
+            valueNode.className = "chart-summary-metric-value";
+            valueNode.textContent = value;
+
+            element.appendChild(valueNode);
+
+        } else {
+
+            element.textContent = value;
+
+        }
 
         if (label) {
 
@@ -1068,20 +1091,26 @@ const ChartPage = {
     getStatusColor(className) {
 
         const colors = {
-            "status-dot-ideal": "#7A9E7E",
-            "status-dot-info": "#8CA3B8",
-            "status-dot-caution": "#C2A36B",
-            "status-dot-high": "#B7796B"
+            "status-dot-ideal": "#34C759",
+            "status-dot-info": "#4D9FFF",
+            "status-dot-caution": "#FF9500",
+            "status-dot-high": "#FF6B6B"
         };
 
         return colors[className] || "#8E8E93";
 
     },
 
+    normalizeStatusLabel(label) {
+
+        return label === "理想" ? "正常" : label;
+
+    },
+
     createEmptyStatusSummary() {
 
         return {
-            ideal: { label: "理想", dotClass: "status-dot-ideal", count: 0 },
+            ideal: { label: "正常", dotClass: "status-dot-ideal", count: 0 },
             info: { label: "前期", dotClass: "status-dot-info", count: 0 },
             caution: { label: "一期", dotClass: "status-dot-caution", count: 0 },
             high: { label: "二期", dotClass: "status-dot-high", count: 0 }

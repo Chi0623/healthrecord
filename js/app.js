@@ -25,6 +25,8 @@ const App = {
 
         diaAutoFocus: false,
 
+        programmaticFocus: false,
+
         userOptions: []
     
     },
@@ -212,6 +214,8 @@ const App = {
 
             loading: document.getElementById("loadingOverlay"),
 
+            loadingText: document.querySelector(".loading-text"),
+
             currentTime: document.getElementById("currentTime"),
 
             todayCard: document.getElementById("todayCard"),
@@ -244,7 +248,9 @@ const App = {
 
             pages: document.querySelectorAll(".page"),
 
-            cards: document.querySelectorAll(".bp-card")
+            cards: document.querySelectorAll(".bp-card"),
+
+            tabbar: document.querySelector(".tabbar")
 
         };
 
@@ -365,8 +371,16 @@ const App = {
         requestAnimationFrame(() => {
 
             if(this.state.currentPage==="home"){
+
+                this.state.programmaticFocus = true;
         
                 this.elements.sys.focus();
+
+                window.setTimeout(() => {
+
+                    this.state.programmaticFocus = false;
+
+                }, 0);
         
             }
         
@@ -422,6 +436,12 @@ const App = {
 
     showLoading() {
 
+        if (this.elements.loadingText) {
+
+            this.elements.loadingText.textContent = "儲存中";
+
+        }
+
         this.elements.loading.classList.remove("hidden");
 
     },
@@ -429,6 +449,39 @@ const App = {
     hideLoading() {
 
         this.elements.loading.classList.add("hidden");
+
+    },
+
+    setKeyboardOpen(open) {
+
+        document.body.classList.toggle("is-keyboard-open", open);
+
+        if (this.elements.tabbar) {
+
+            this.elements.tabbar.setAttribute(
+                "aria-hidden",
+                open ? "true" : "false"
+            );
+
+        }
+
+    },
+
+    scrollFocusedCardIntoView(input) {
+
+        const card = input.closest(".bp-card");
+
+        if (!card) return;
+
+        window.setTimeout(() => {
+
+            card.scrollIntoView({
+                behavior: "smooth",
+                block: "center",
+                inline: "nearest"
+            });
+
+        }, 120);
 
     },
 
@@ -662,6 +715,30 @@ const App = {
 
                 input.select();
 
+                if (!this.state.programmaticFocus) {
+
+                    this.setKeyboardOpen(true);
+
+                }
+
+                this.scrollFocusedCardIntoView(input);
+
+            });
+
+            input.addEventListener("blur", () => {
+
+                window.setTimeout(() => {
+
+                    const active = document.activeElement;
+
+                    if (!active || !active.classList.contains("bp-input")) {
+
+                        this.setKeyboardOpen(false);
+
+                    }
+
+                }, 80);
+
             });
 
             // Enter
@@ -748,6 +825,14 @@ const App = {
     ========================================== */
 
     async switchPage(page) {
+
+        if (document.activeElement && document.activeElement.blur) {
+
+            document.activeElement.blur();
+
+        }
+
+        this.setKeyboardOpen(false);
 
         this.state.currentPage = page;
     
@@ -964,6 +1049,10 @@ const App = {
 
         this.elements.saveBtn.disabled = true;
 
+        const previousButtonText = this.elements.saveBtn.textContent;
+
+        this.elements.saveBtn.textContent = "儲存中";
+
         this.showLoading();
 
         try {
@@ -1024,7 +1113,7 @@ const App = {
 
                 this.saveFailed(
 
-                    result.message || "儲存失敗"
+                    result.message || "儲存失敗，請再按一次"
 
                 );
 
@@ -1038,7 +1127,7 @@ const App = {
 
             this.saveFailed(
 
-                "無法連線 Google Sheet"
+                "儲存失敗，請再按一次"
 
             );
 
@@ -1049,6 +1138,12 @@ const App = {
             this.state.saving = false;
 
             this.elements.saveBtn.disabled = false;
+
+            if (this.elements.saveBtn.textContent === "儲存中") {
+
+                this.elements.saveBtn.textContent = previousButtonText;
+
+            }
 
             this.hideLoading();
 
@@ -1064,11 +1159,19 @@ const App = {
 
     async saveSuccess() {
 
+        const refreshed = await this.refreshToday();
+
+        if (!refreshed) {
+
+            this.showToast("已儲存，畫面更新失敗");
+
+            return;
+
+        }
+
         this.showToast("已儲存紀錄");
     
         this.clearForm();
-
-        await this.refreshToday();
     
         // 更新紀錄頁
         if (window.History) {
@@ -1088,9 +1191,11 @@ const App = {
 
 
 
-    saveFailed(message) {
+    saveFailed() {
 
-        this.showToast(message);
+        this.elements.saveBtn.textContent = "儲存紀錄";
+
+        this.showToast("儲存失敗，請再按一次");
 
     },
 
@@ -1132,7 +1237,7 @@ const App = {
 
             this.renderTodayEmpty();
 
-            return;
+            return false;
 
         }
 
@@ -1147,11 +1252,13 @@ const App = {
 
                 this.renderTodayEmpty();
 
-                return;
+                return false;
 
             }
 
             this.renderToday(result.data);
+
+            return true;
 
         }
 
@@ -1161,13 +1268,15 @@ const App = {
 
             this.renderTodayEmpty();
 
+            return false;
+
         }
 
     },
 
     async refreshToday() {
 
-        await this.loadToday();
+        return await this.loadToday();
 
     },
 
@@ -1254,7 +1363,7 @@ const App = {
             this.getUserName();
 
         this.elements.todayGreeting.textContent =
-            `親愛的${user}，${this.getGreetingLabel(now)}~`;
+            `${user}，${this.getGreetingLabel(now)}~`;
 
     },
 
@@ -1517,37 +1626,38 @@ const App = {
 
         const partsByType = {
             dawn: [
-                { tag: "path", attrs: { d: "M4 18h16" } },
-                { tag: "path", attrs: { d: "M7 15a5 5 0 0 1 10 0" } },
-                { tag: "path", attrs: { d: "M12 5v4" } },
-                { tag: "path", attrs: { d: "m5.5 10.5 2.1 2.1" } },
-                { tag: "path", attrs: { d: "m18.5 10.5-2.1 2.1" } }
+                { tag: "path", attrs: { d: "M3 16c2 .8 4 .8 6 0s4-.8 6 0 4 .8 6 0" } },
+                { tag: "path", attrs: { d: "M6.5 16a5.5 5.5 0 0 1 11 0" } },
+                { tag: "path", attrs: { d: "M12 4v3" } },
+                { tag: "path", attrs: { d: "m7.4 6.1 1.4 2.4" } },
+                { tag: "path", attrs: { d: "m16.6 6.1-1.4 2.4" } },
+                { tag: "path", attrs: { d: "M4.4 10.2 7 11.7" } },
+                { tag: "path", attrs: { d: "m19.6 10.2-2.6 1.5" } }
             ],
             morning: [
-                { tag: "circle", attrs: { cx: "12", cy: "12", r: "4" } },
-                { tag: "path", attrs: { d: "M12 2v2" } },
-                { tag: "path", attrs: { d: "M12 20v2" } },
-                { tag: "path", attrs: { d: "M4 12H2" } },
-                { tag: "path", attrs: { d: "M22 12h-2" } },
-                { tag: "path", attrs: { d: "m5 5 1.5 1.5" } },
-                { tag: "path", attrs: { d: "m17.5 17.5L19 19" } },
-                { tag: "path", attrs: { d: "m19 5-1.5 1.5" } },
-                { tag: "path", attrs: { d: "m6.5 17.5L5 19" } }
+                { tag: "circle", attrs: { cx: "12", cy: "12", r: "5.5" } },
+                { tag: "path", attrs: { d: "M12 1.8v2" } },
+                { tag: "path", attrs: { d: "M12 20.2v2" } },
+                { tag: "path", attrs: { d: "M1.8 12h2" } },
+                { tag: "path", attrs: { d: "M20.2 12h2" } },
+                { tag: "path", attrs: { d: "m4.8 4.8 1.4 1.4" } },
+                { tag: "path", attrs: { d: "m17.8 17.8 1.4 1.4" } },
+                { tag: "path", attrs: { d: "m19.2 4.8-1.4 1.4" } },
+                { tag: "path", attrs: { d: "m6.2 17.8-1.4 1.4" } }
             ],
             afternoon: [
-                { tag: "path", attrs: { d: "M4 18h16" } },
-                { tag: "path", attrs: { d: "M7 15a5 5 0 0 1 10 0" } },
-                { tag: "path", attrs: { d: "M12 9v2" } },
-                { tag: "path", attrs: { d: "M4 12h2" } },
-                { tag: "path", attrs: { d: "M18 12h2" } }
+                { tag: "path", attrs: { d: "M4 15h16" } },
+                { tag: "path", attrs: { d: "M6.5 15a5.5 5.5 0 0 1 11 0" } },
+                { tag: "path", attrs: { d: "M12 4v3" } },
+                { tag: "path", attrs: { d: "m7.4 6.2 1.4 2.4" } },
+                { tag: "path", attrs: { d: "m16.6 6.2-1.4 2.4" } },
+                { tag: "path", attrs: { d: "M4.5 10.2 7 11.6" } },
+                { tag: "path", attrs: { d: "m19.5 10.2-2.5 1.4" } },
+                { tag: "path", attrs: { d: "M8 17.5h8" } },
+                { tag: "path", attrs: { d: "M9.5 20h5" } }
             ],
             night: [
-                {
-                    tag: "path",
-                    attrs: {
-                        d: "M20 15.5A8.5 8.5 0 0 1 8.5 4 7 7 0 1 0 20 15.5Z"
-                    }
-                }
+                { tag: "path", attrs: { d: "M19.2 14.7A7.3 7.3 0 0 1 8.4 5.3a6 6 0 1 0 10.8 9.4Z" } }
             ],
             time: [
                 { tag: "circle", attrs: { cx: "12", cy: "12", r: "8" } },
@@ -1652,7 +1762,7 @@ const App = {
         }
 
         return {
-            label: "理想",
+            label: "正常",
             className: ""
         };
 
