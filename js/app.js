@@ -1611,6 +1611,7 @@ const App = {
         let minX = endX;
         let maxX = startX;
         let darkCount = 0;
+        const columnCounts = new Array(width).fill(0);
 
         for (let y = band.top; y <= band.bottom; y += 1) {
 
@@ -1618,8 +1619,7 @@ const App = {
 
                 if (gray[y * width + x] <= threshold) {
 
-                    minX = Math.min(minX, x);
-                    maxX = Math.max(maxX, x);
+                    columnCounts[x] += 1;
                     darkCount += 1;
 
                 }
@@ -1628,7 +1628,27 @@ const App = {
 
         }
 
-        if (!darkCount || maxX <= minX) return null;
+        if (!darkCount) return null;
+
+        const activeColumns = [];
+        const columnThreshold = Math.max(1, Math.round((band.bottom - band.top + 1) * .08));
+
+        for (let x = startX; x < endX; x += 1) {
+
+            if (columnCounts[x] >= columnThreshold) {
+
+                activeColumns.push(x);
+
+            }
+
+        }
+
+        if (!activeColumns.length) return null;
+
+        minX = Math.min(...activeColumns);
+        maxX = Math.max(...activeColumns);
+
+        if (maxX <= minX) return null;
 
         const padX = Math.round(width * .035);
         const padY = Math.round(height * .035);
@@ -2396,13 +2416,29 @@ const App = {
                 : await this.loadOcrBitmap(source);
         const lcd = this.detectLcdForOcr(bitmap);
 
-        if (!lcd || !lcd.canvas) {
+        if (lcd && lcd.canvas) {
 
-            return null;
+            const lcdValues = await this.recognizeBloodPressureFromDigitCanvas(
+                lcd.canvas
+            );
+
+            if (lcdValues) {
+
+                return lcdValues;
+
+            }
 
         }
 
-        const fields = this.detectDigitFieldsFromLcdCanvas(lcd.canvas);
+        const photoCanvas = this.createBitmapCanvas(bitmap, 1200);
+
+        return await this.recognizeBloodPressureFromDigitCanvas(photoCanvas);
+
+    },
+
+    async recognizeBloodPressureFromDigitCanvas(canvas) {
+
+        const fields = this.detectDigitFieldsFromLcdCanvas(canvas);
 
         if (!fields) {
 
@@ -2420,7 +2456,7 @@ const App = {
         for (const key of ["sys", "dia", "pulse"]) {
 
             const value = await this.recognizeTemplateField(
-                lcd.canvas,
+                canvas,
                 fields[key],
                 ranges[key]
             );
@@ -2952,16 +2988,75 @@ const App = {
 
         }
 
-        const selected = groups
-            .sort((a, b) => b.score - a.score)
-            .slice(0, 3)
-            .sort((a, b) => a.rect.y - b.rect.y);
+        const selected = this.selectBestDigitFieldTriplet(groups);
+
+        if (!selected) {
+
+            return null;
+
+        }
 
         return {
             sys: selected[0].rect,
             dia: selected[1].rect,
             pulse: selected[2].rect
         };
+
+    },
+
+    selectBestDigitFieldTriplet(groups) {
+
+        if (!groups || groups.length < 3) return null;
+
+        const sorted = [...groups]
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 10);
+        let best = null;
+        let bestScore = -Infinity;
+
+        for (let a = 0; a < sorted.length - 2; a += 1) {
+
+            for (let b = a + 1; b < sorted.length - 1; b += 1) {
+
+                for (let c = b + 1; c < sorted.length; c += 1) {
+
+                    const triplet = [sorted[a], sorted[b], sorted[c]]
+                        .sort((x, y) => x.rect.y - y.rect.y);
+                    const firstGap = triplet[1].rect.y - triplet[0].rect.y;
+                    const secondGap = triplet[2].rect.y - triplet[1].rect.y;
+                    const xCenters = triplet.map(item => item.rect.x + item.rect.width / 2);
+                    const avgX = xCenters.reduce((sum, value) => sum + value, 0) / 3;
+                    const xSpread = Math.max(...xCenters) - Math.min(...xCenters);
+                    const sizeScore = triplet.reduce(
+                        (sum, item) => sum + item.score,
+                        0
+                    );
+                    const verticalScore =
+                        this.scoreSoftRange(firstGap, .05, .36, .09, .24) *
+                        this.scoreSoftRange(secondGap, .05, .36, .09, .24);
+                    const alignScore = 1 - Math.min(1, xSpread / .34);
+                    const positionScore =
+                        this.scoreSoftRange(avgX, .18, .88, .34, .72);
+                    const total =
+                        sizeScore * .55 +
+                        verticalScore * 8 +
+                        alignScore * 6 +
+                        positionScore * 3;
+
+                    if (total > bestScore) {
+
+                        best = triplet;
+                        bestScore = total;
+
+                    }
+
+                }
+
+            }
+
+        }
+
+        return best;
 
     },
 
@@ -2987,13 +3082,15 @@ const App = {
 
     findDigitRowGroups(gray, threshold, width, height) {
 
-        const startX = Math.round(width * .03);
+        const startX = Math.round(width * .02);
         const endX = Math.round(width * .98);
         const rowCounts = new Array(height).fill(0);
+        const minRun = Math.max(2, Math.round(width * .004));
 
         for (let y = 0; y < height; y += 1) {
 
             let count = 0;
+            let run = 0;
 
             for (let x = startX; x < endX; x += 1) {
 
@@ -3001,9 +3098,25 @@ const App = {
 
                 if (value <= threshold) {
 
-                    count += 1;
+                    run += 1;
+
+                } else {
+
+                    if (run >= minRun) {
+
+                        count += run;
+
+                    }
+
+                    run = 0;
 
                 }
+
+            }
+
+            if (run >= minRun) {
+
+                count += run;
 
             }
 
@@ -3031,7 +3144,7 @@ const App = {
 
         });
         const maxRow = Math.max(...smoothed);
-        const activeThreshold = Math.max(7, maxRow * .18);
+        const activeThreshold = Math.max(5, maxRow * .16);
         const bands = [];
         let start = null;
 
@@ -3068,9 +3181,10 @@ const App = {
             ))
             .filter(Boolean)
             .filter(group => (
-                group.rect.width >= .14 &&
-                group.rect.height >= .055 &&
-                group.rect.height <= .32
+                group.rect.width >= .08 &&
+                group.rect.width <= .78 &&
+                group.rect.height >= .035 &&
+                group.rect.height <= .26
             ));
 
     },
@@ -3249,12 +3363,16 @@ const App = {
 
         for (const image of images) {
 
-            const text = await this.recognizeOcrCanvas(image, "7");
-            const value = this.extractSingleOcrNumber(text, range);
+            for (const pageSegMode of ["7", "8"]) {
 
-            if (Number.isFinite(value)) {
+                const text = await this.recognizeOcrCanvas(image, pageSegMode);
+                const value = this.extractSingleOcrNumber(text, range);
 
-                return value;
+                if (Number.isFinite(value)) {
+
+                    return value;
+
+                }
 
             }
 
