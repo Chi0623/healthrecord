@@ -38,9 +38,6 @@ Error:
 - `getRecords()`
 - `getTodayRecord()`
 - `getTrend()`
-- `getOcrTemplate()`
-- `saveOcrTemplate()`
-- `deleteOcrTemplate()`
 
 ## saveRecord()
 
@@ -212,74 +209,6 @@ Request:
   "action": "getTrend",
   "user": "爸爸",
   "days": 30
-}
-```
-
-## OCR Template
-
-OCR 模板存放在獨立 Sheet 分頁 `OCRTemplates`，不修改 `血壓紀錄` 欄位。
-
-欄位：
-
-```text
-User, Version, LcdX, LcdY, LcdW, LcdH, SysX, SysY, SysW, SysH, DiaX, DiaY, DiaW, DiaH, PulseX, PulseY, PulseW, PulseH, UpdatedAt
-```
-
-### getOcrTemplate()
-
-Request:
-
-```json
-{
-  "action": "getOcrTemplate",
-  "user": "爸爸"
-}
-```
-
-Response:
-
-```json
-{
-  "success": true,
-  "message": "",
-  "data": {
-    "user": "爸爸",
-    "version": 2,
-    "lcd": { "x": 0.1, "y": 0.2, "width": 0.7, "height": 0.55 },
-    "fields": {
-      "sys": { "x": 0.45, "y": 0.15, "width": 0.3, "height": 0.18 },
-      "dia": { "x": 0.45, "y": 0.4, "width": 0.3, "height": 0.18 },
-      "pulse": { "x": 0.5, "y": 0.65, "width": 0.25, "height": 0.15 }
-    },
-    "updatedAt": "2026-07-10 12:00:00"
-  }
-}
-```
-
-### saveOcrTemplate()
-
-Request:
-
-```json
-{
-  "action": "saveOcrTemplate",
-  "user": "爸爸",
-  "version": 2,
-  "lcd": "{\"x\":0.1,\"y\":0.2,\"width\":0.7,\"height\":0.55}",
-  "sys": "{\"x\":0.45,\"y\":0.15,\"width\":0.3,\"height\":0.18}",
-  "dia": "{\"x\":0.45,\"y\":0.4,\"width\":0.3,\"height\":0.18}",
-  "pulse": "{\"x\":0.5,\"y\":0.65,\"width\":0.25,\"height\":0.15}"
-}
-```
-
-### deleteOcrTemplate()
-
-Request:
-
-```json
-{
-  "action": "deleteOcrTemplate",
-  "user": "爸爸"
 }
 ```
 

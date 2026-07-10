@@ -43,7 +43,7 @@
 
     <link
         rel="stylesheet"
-        href="css/style.css?v=20260710-auto-fields">
+        href="css/style.css?v=20260710-ocr-replace-inputs">
 
 </head>
 
@@ -1161,124 +1161,6 @@
 
             <section
                 class="settings-card"
-                aria-label="OCR 位置設定">
-
-                <div class="settings-card-header">
-
-                    <div class="settings-card-eyebrow">
-
-                        OCR Template
-
-                    </div>
-
-                    <div class="settings-card-title">
-
-                        OCR 位置設定
-
-                    </div>
-
-                </div>
-
-                <div
-                    id="ocrTemplateStatus"
-                    class="settings-card-subtitle">
-
-                    尚未設定
-
-                </div>
-
-                <div class="settings-actions ocr-template-actions">
-
-                    <button
-                        id="ocrTemplateStartBtn"
-                        class="settings-primary-btn"
-                        type="button">
-
-                        拍照設定
-
-                    </button>
-
-                    <button
-                        id="ocrTemplateClearBtn"
-                        class="settings-secondary-btn"
-                        type="button">
-
-                        清除設定
-
-                    </button>
-
-                </div>
-
-                <div
-                    id="ocrTemplatePanel"
-                    class="ocr-template-panel"
-                    hidden>
-
-                    <video
-                        id="ocrTemplateVideo"
-                        class="ocr-template-video"
-                        autoplay
-                        playsinline
-                        muted></video>
-
-                    <canvas
-                        id="ocrTemplateCanvas"
-                        class="ocr-template-canvas"></canvas>
-
-                    <div
-                        id="ocrTemplateHint"
-                        class="ocr-template-hint"
-                        aria-live="polite">
-
-                        請拍下血壓計
-
-                    </div>
-
-                    <div class="ocr-template-step-list">
-
-                        <span class="ocr-template-step active" data-template-step="lcd">LCD</span>
-                        <span class="ocr-template-step" data-template-step="auto">自動數字</span>
-
-                    </div>
-
-                    <div class="settings-actions ocr-template-actions">
-
-                        <button
-                            id="ocrTemplateCaptureBtn"
-                            class="settings-primary-btn"
-                            type="button">
-
-                            拍下
-
-                        </button>
-
-                        <button
-                            id="ocrTemplateDebugBtn"
-                            class="settings-secondary-btn"
-                            type="button"
-                            aria-pressed="false">
-
-                            Debug
-
-                        </button>
-
-                        <button
-                            id="ocrTemplateCancelBtn"
-                            class="settings-secondary-btn"
-                            type="button">
-
-                            取消
-
-                        </button>
-
-                    </div>
-
-                </div>
-
-            </section>
-
-            <section
-                class="settings-card"
                 aria-label="燈號規則">
 
                 <div class="settings-card-header">
@@ -1525,11 +1407,10 @@
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/opencv.js"></script>
-    <script src="js/api.js?v=20260710-auto-fields"></script>
+    <script src="js/api.js?v=20260707-17"></script>
     <script src="js/history.js?v=20260710-caution-red"></script>
     <script src="js/chart.js?v=20260710-caution-red"></script>
-    <script src="js/app.js?v=20260710-digit-first"></script>    
+    <script src="js/app.js?v=20260710-lcd-ocr-crops"></script>    
 
 </body>
 </html>
