@@ -2583,25 +2583,25 @@ const App = {
             {
                 label: "Tensoval 右側大字 fallback A",
                 fields: {
-                    sys: { x: .43, y: .245, width: .24, height: .105 },
-                    dia: { x: .46, y: .355, width: .22, height: .105 },
-                    pulse: { x: .49, y: .478, width: .18, height: .090 }
+                    sys: { x: .405, y: .292, width: .292, height: .100 },
+                    dia: { x: .440, y: .402, width: .252, height: .100 },
+                    pulse: { x: .475, y: .522, width: .220, height: .092 }
                 }
             },
             {
                 label: "Tensoval 右側大字 fallback B",
                 fields: {
-                    sys: { x: .39, y: .225, width: .30, height: .120 },
-                    dia: { x: .43, y: .335, width: .27, height: .120 },
-                    pulse: { x: .46, y: .455, width: .24, height: .105 }
+                    sys: { x: .385, y: .278, width: .320, height: .118 },
+                    dia: { x: .420, y: .388, width: .292, height: .118 },
+                    pulse: { x: .455, y: .508, width: .260, height: .108 }
                 }
             },
             {
                 label: "Tensoval 右側大字 fallback C",
                 fields: {
-                    sys: { x: .36, y: .205, width: .34, height: .140 },
-                    dia: { x: .40, y: .320, width: .31, height: .135 },
-                    pulse: { x: .43, y: .440, width: .28, height: .120 }
+                    sys: { x: .410, y: .305, width: .285, height: .095 },
+                    dia: { x: .445, y: .415, width: .250, height: .095 },
+                    pulse: { x: .480, y: .532, width: .215, height: .090 }
                 }
             }
         ];
@@ -3731,7 +3731,7 @@ const App = {
             .filter(Boolean)
             .filter(rect => (
                 rect.width >= width * .035 &&
-                rect.height >= height * .32 &&
+                rect.height >= height * .38 &&
                 rect.width <= width * .48
             ));
 
