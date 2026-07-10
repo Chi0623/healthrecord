@@ -1075,7 +1075,7 @@ const App = {
 
         const cvBest = this.findLcdWithOpenCv(canvas);
 
-        if (cvBest && cvBest.score >= .46) {
+        if (cvBest && cvBest.score >= .58) {
 
             this.ocr.templateLcdCandidates = [cvBest];
             this.ocr.templateLcdDetection = {
@@ -2450,7 +2450,7 @@ const App = {
         const canvas = this.createBitmapCanvas(bitmap, 960);
         const cvResult = this.findLcdWithOpenCv(canvas);
 
-        if (cvResult && cvResult.score >= .46) {
+        if (cvResult && cvResult.score >= .58) {
 
             return {
                 ...cvResult,
@@ -2534,6 +2534,28 @@ const App = {
             for (let i = 0; i < contours.size(); i += 1) {
 
                 const contour = contours.get(i);
+                const bounds = cv.boundingRect(contour);
+                const boundAreaRatio =
+                    (bounds.width * bounds.height) /
+                    Math.max(1, canvas.width * canvas.height);
+                const boundAspect =
+                    bounds.width / Math.max(1, bounds.height);
+
+                if (
+                    boundAreaRatio < .035 ||
+                    boundAreaRatio > .62 ||
+                    bounds.width < canvas.width * .18 ||
+                    bounds.height < canvas.height * .08 ||
+                    boundAspect < 1.05 ||
+                    boundAspect > 5.2
+                ) {
+
+                    contour.delete();
+
+                    continue;
+
+                }
+
                 const peri = cv.arcLength(contour, true);
                 const approx = new cv.Mat();
 
@@ -2630,6 +2652,37 @@ const App = {
         ]);
         const areaRatio = area / Math.max(1, width * height);
         const aspect = quadWidth / Math.max(1, quadHeight);
+        const rectLeft = Math.min(ordered.tl.x, ordered.bl.x);
+        const rectTop = Math.min(ordered.tl.y, ordered.tr.y);
+        const rectRight = Math.max(ordered.tr.x, ordered.br.x);
+        const rectBottom = Math.max(ordered.bl.y, ordered.br.y);
+        const rectWidthRatio = (rectRight - rectLeft) / width;
+        const rectHeightRatio = (rectBottom - rectTop) / height;
+
+        if (
+            areaRatio < .035 ||
+            areaRatio > .62 ||
+            rectWidthRatio < .18 ||
+            rectHeightRatio < .08 ||
+            aspect < 1.05 ||
+            aspect > 5.2 ||
+            quadWidth < 80 ||
+            quadHeight < 36
+        ) {
+
+            return {
+                score: 0,
+                corners: ordered,
+                rect: {
+                    x: rectLeft / width,
+                    y: rectTop / height,
+                    width: rectWidthRatio,
+                    height: rectHeightRatio
+                }
+            };
+
+        }
+
         const centerX =
             (ordered.tl.x + ordered.tr.x + ordered.br.x + ordered.bl.x) /
             4 /
@@ -2658,16 +2711,10 @@ const App = {
             score,
             corners: ordered,
             rect: {
-                x: Math.min(ordered.tl.x, ordered.bl.x) / width,
-                y: Math.min(ordered.tl.y, ordered.tr.y) / height,
-                width:
-                    (Math.max(ordered.tr.x, ordered.br.x) -
-                        Math.min(ordered.tl.x, ordered.bl.x)) /
-                    width,
-                height:
-                    (Math.max(ordered.bl.y, ordered.br.y) -
-                        Math.min(ordered.tl.y, ordered.tr.y)) /
-                    height
+                x: rectLeft / width,
+                y: rectTop / height,
+                width: rectWidthRatio,
+                height: rectHeightRatio
             }
         };
 
