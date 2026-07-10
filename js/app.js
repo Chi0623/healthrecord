@@ -3013,6 +3013,274 @@ const App = {
         }
 
         const threshold = this.estimateDarkPixelThreshold(histogram, gray.length);
+        let groups = this.findDigitRowsInBloodPressureRoi(
+            gray,
+            threshold,
+            sampleWidth,
+            sampleHeight
+        );
+        let usedComponents = false;
+
+        if (groups.length < 3) {
+
+            groups = this.findDigitRowGroups(
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight
+            );
+
+        }
+
+        if (groups.length < 3) {
+
+            groups = this.findDigitGroupsByComponents(
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight
+            );
+            usedComponents = true;
+
+        }
+
+        let selected = this.selectBestDigitFieldTriplet(groups);
+
+        if (!selected && !usedComponents) {
+
+            groups = this.findDigitGroupsByComponents(
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight
+            );
+            selected = this.selectBestDigitFieldTriplet(groups);
+
+        }
+
+        if (!selected) {
+
+            return null;
+
+        }
+
+        return {
+            sys: selected[0].rect,
+            dia: selected[1].rect,
+            pulse: selected[2].rect
+        };
+
+    },
+
+    findDigitRowsInBloodPressureRoi(gray, threshold, width, height) {
+
+        const rois = [
+            {
+                x1: .36,
+                x2: .78,
+                y1: .18,
+                y2: .72
+            },
+            {
+                x1: .30,
+                x2: .82,
+                y1: .16,
+                y2: .76
+            },
+            {
+                x1: .22,
+                x2: .78,
+                y1: .18,
+                y2: .74
+            }
+        ];
+        const groups = [];
+
+        rois.forEach(roi => {
+
+            groups.push(...this.findDigitRowsInRoi(
+                gray,
+                threshold,
+                width,
+                height,
+                roi
+            ));
+
+        });
+
+        return this.dedupeDigitGroups(groups);
+
+    },
+
+    findDigitRowsInRoi(gray, threshold, width, height, roi) {
+
+        const startX = Math.round(width * roi.x1);
+        const endX = Math.round(width * roi.x2);
+        const startY = Math.round(height * roi.y1);
+        const endY = Math.round(height * roi.y2);
+        const rowCounts = new Array(height).fill(0);
+
+        for (let y = startY; y < endY; y += 1) {
+
+            let count = 0;
+
+            for (let x = startX; x < endX; x += 1) {
+
+                if (gray[y * width + x] <= threshold) {
+
+                    count += 1;
+
+                }
+
+            }
+
+            rowCounts[y] = count;
+
+        }
+
+        const smoothed = rowCounts.map((_, index) => {
+
+            let sum = 0;
+            let size = 0;
+
+            for (
+                let y = Math.max(startY, index - 5);
+                y <= Math.min(endY - 1, index + 5);
+                y += 1
+            ) {
+
+                sum += rowCounts[y];
+                size += 1;
+
+            }
+
+            return size ? sum / size : 0;
+
+        });
+        const maxRow = Math.max(...smoothed);
+        const activeThreshold = Math.max(4, maxRow * .22);
+        const bands = [];
+        let start = null;
+
+        for (let y = startY; y < endY; y += 1) {
+
+            if (smoothed[y] >= activeThreshold && start === null) {
+
+                start = y;
+
+            } else if (smoothed[y] < activeThreshold && start !== null) {
+
+                bands.push({
+                    top: start,
+                    bottom: y - 1
+                });
+                start = null;
+
+            }
+
+        }
+
+        if (start !== null) {
+
+            bands.push({
+                top: start,
+                bottom: endY - 1
+            });
+
+        }
+
+        return this.mergeDigitBands(bands, height)
+            .map(band => this.createNumberFieldFromBand(
+                band,
+                gray,
+                threshold,
+                width,
+                height,
+                startX,
+                endX
+            ))
+            .filter(Boolean)
+            .filter(group => (
+                group.rect.width >= .07 &&
+                group.rect.width <= .50 &&
+                group.rect.height >= .030 &&
+                group.rect.height <= .18
+            ));
+
+    },
+
+    dedupeDigitGroups(groups) {
+
+        const sorted = [...groups].sort((a, b) => b.score - a.score);
+        const result = [];
+
+        sorted.forEach(group => {
+
+            const duplicate = result.some(existing =>
+                this.rectOverlapRatio(group.rect, existing.rect) >= .55
+            );
+
+            if (!duplicate) {
+
+                result.push(group);
+
+            }
+
+        });
+
+        return result;
+
+    },
+
+    rectOverlapRatio(a, b) {
+
+        const left = Math.max(a.x, b.x);
+        const top = Math.max(a.y, b.y);
+        const right = Math.min(a.x + a.width, b.x + b.width);
+        const bottom = Math.min(a.y + a.height, b.y + b.height);
+        const width = Math.max(0, right - left);
+        const height = Math.max(0, bottom - top);
+        const intersection = width * height;
+        const minArea = Math.min(a.width * a.height, b.width * b.height);
+
+        return minArea ? intersection / minArea : 0;
+
+    },
+
+    detectDigitFieldsFromLcdCanvasLegacy(lcdCanvas) {
+
+        const sampleWidth = 520;
+        const sampleHeight = Math.max(
+            180,
+            Math.round(lcdCanvas.height * sampleWidth / lcdCanvas.width)
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = sampleWidth;
+        canvas.height = sampleHeight;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(lcdCanvas, 0, 0, sampleWidth, sampleHeight);
+
+        const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = imageData.data;
+        const gray = new Uint8Array(sampleWidth * sampleHeight);
+        const histogram = new Array(256).fill(0);
+
+        for (let i = 0; i < gray.length; i += 1) {
+
+            const offset = i * 4;
+            const value = Math.round(
+                data[offset] * .299 +
+                data[offset + 1] * .587 +
+                data[offset + 2] * .114
+            );
+
+            gray[i] = value;
+            histogram[value] += 1;
+
+        }
+
+        const threshold = this.estimateDarkPixelThreshold(histogram, gray.length);
         let groups = this.findDigitRowGroups(
             gray,
             threshold,
