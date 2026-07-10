@@ -2790,6 +2790,114 @@ body.is-keyboard-open .tabbar{
 
 }
 
+.ocr-template-actions{
+
+    margin-top:14px;
+
+}
+
+.ocr-template-panel{
+
+    margin-top:14px;
+
+}
+
+.ocr-template-panel[hidden]{
+
+    display:none;
+
+}
+
+.ocr-template-video,
+.ocr-template-canvas{
+
+    width:100%;
+
+    aspect-ratio:4 / 3;
+
+    display:block;
+
+    border-radius:18px;
+
+    background:#111111;
+
+    object-fit:cover;
+
+    touch-action:none;
+
+}
+
+.ocr-template-video[hidden],
+.ocr-template-canvas[hidden]{
+
+    display:none;
+
+}
+
+.ocr-template-hint{
+
+    margin-top:10px;
+
+    color:var(--secondary);
+
+    font-size:.9rem;
+
+    line-height:1.4;
+
+    font-weight:700;
+
+}
+
+.ocr-template-step-list{
+
+    margin-top:10px;
+
+    display:flex;
+
+    gap:8px;
+
+}
+
+.ocr-template-step{
+
+    min-height:34px;
+
+    padding:0 12px;
+
+    border-radius:999px;
+
+    background:rgba(142,142,147,.10);
+
+    color:var(--secondary);
+
+    font-size:.82rem;
+
+    font-weight:800;
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+}
+
+.ocr-template-step.active{
+
+    background:rgba(0,122,255,.14);
+
+    color:var(--primary);
+
+}
+
+.ocr-template-step.done{
+
+    background:rgba(52,199,89,.14);
+
+    color:var(--pulse);
+
+}
+
 .settings-primary-btn,
 .settings-secondary-btn{
 

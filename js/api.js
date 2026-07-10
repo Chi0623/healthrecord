@@ -324,6 +324,42 @@ async function getUsers() {
 
 }
 
+async function getOcrTemplate(user) {
+
+    return await apiRequest(
+        "getOcrTemplate",
+        {
+            user
+        }
+    );
+
+}
+
+async function saveOcrTemplate(user, template) {
+
+    return await apiRequest(
+        "saveOcrTemplate",
+        {
+            user,
+            sys: JSON.stringify(template.sys),
+            dia: JSON.stringify(template.dia),
+            pulse: JSON.stringify(template.pulse)
+        }
+    );
+
+}
+
+async function deleteOcrTemplate(user) {
+
+    return await apiRequest(
+        "deleteOcrTemplate",
+        {
+            user
+        }
+    );
+
+}
+
 /* ==========================================================
    趨勢
 ========================================================== */

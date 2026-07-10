@@ -38,6 +38,9 @@ Error:
 - `getRecords()`
 - `getTodayRecord()`
 - `getTrend()`
+- `getOcrTemplate()`
+- `saveOcrTemplate()`
+- `deleteOcrTemplate()`
 
 ## saveRecord()
 
@@ -209,6 +212,68 @@ Request:
   "action": "getTrend",
   "user": "爸爸",
   "days": 30
+}
+```
+
+## OCR Template
+
+OCR 模板存放在獨立 Sheet 分頁 `OCRTemplates`，不修改 `血壓紀錄` 欄位。
+
+欄位：
+
+```text
+User, SysX, SysY, SysW, SysH, DiaX, DiaY, DiaW, DiaH, PulseX, PulseY, PulseW, PulseH, UpdatedAt
+```
+
+### getOcrTemplate()
+
+Request:
+
+```json
+{
+  "action": "getOcrTemplate",
+  "user": "爸爸"
+}
+```
+
+Response:
+
+```json
+{
+  "success": true,
+  "message": "",
+  "data": {
+    "user": "爸爸",
+    "sys": { "x": 0.4, "y": 0.2, "width": 0.2, "height": 0.1 },
+    "dia": { "x": 0.4, "y": 0.4, "width": 0.2, "height": 0.1 },
+    "pulse": { "x": 0.4, "y": 0.6, "width": 0.2, "height": 0.1 },
+    "updatedAt": "2026-07-10 12:00:00"
+  }
+}
+```
+
+### saveOcrTemplate()
+
+Request:
+
+```json
+{
+  "action": "saveOcrTemplate",
+  "user": "爸爸",
+  "sys": "{\"x\":0.4,\"y\":0.2,\"width\":0.2,\"height\":0.1}",
+  "dia": "{\"x\":0.4,\"y\":0.4,\"width\":0.2,\"height\":0.1}",
+  "pulse": "{\"x\":0.4,\"y\":0.6,\"width\":0.2,\"height\":0.1}"
+}
+```
+
+### deleteOcrTemplate()
+
+Request:
+
+```json
+{
+  "action": "deleteOcrTemplate",
+  "user": "爸爸"
 }
 ```
 

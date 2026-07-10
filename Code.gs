@@ -30,6 +30,40 @@ const SHEET_HEADERS = [
   "RecordID"
 
 ];
+
+const OCR_TEMPLATE_SHEET_NAME = "OCRTemplates";
+
+const OCR_TEMPLATE_HEADERS = [
+
+  "User",
+
+  "SysX",
+
+  "SysY",
+
+  "SysW",
+
+  "SysH",
+
+  "DiaX",
+
+  "DiaY",
+
+  "DiaW",
+
+  "DiaH",
+
+  "PulseX",
+
+  "PulseY",
+
+  "PulseW",
+
+  "PulseH",
+
+  "UpdatedAt"
+
+];
   
   /* ==========================================================
      POST
@@ -77,6 +111,18 @@ const SHEET_HEADERS = [
 
         case "getUsers":
           result = getUsers();
+          break;
+
+        case "getOcrTemplate":
+          result = getOcrTemplate(data);
+          break;
+
+        case "saveOcrTemplate":
+          result = saveOcrTemplate(data);
+          break;
+
+        case "deleteOcrTemplate":
+          result = deleteOcrTemplate(data);
           break;
   
         default:
@@ -224,6 +270,44 @@ const SHEET_HEADERS = [
   
     return ws;
   
+  }
+
+  function getOrCreateSheet(name, headers) {
+
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+    let ws = ss.getSheetByName(name);
+
+    if (!ws) {
+
+      ws = ss.insertSheet(name);
+
+    }
+
+    ensureCustomSheetHeader(ws, headers);
+
+    return ws;
+
+  }
+
+  function ensureCustomSheetHeader(ws, headers) {
+
+    const headerRange = ws.getRange(1, 1, 1, headers.length);
+
+    const values = headerRange.getValues()[0];
+
+    const matched = headers.every(function(header, index) {
+
+      return String(values[index] || "").trim() === header;
+
+    });
+
+    if (!matched) {
+
+      headerRange.setValues([headers]);
+
+    }
+
   }
 
   function ensureSheetHeader(ws) {
@@ -717,6 +801,263 @@ const SHEET_HEADERS = [
       .sort();
 
     return successResponse("", names);
+
+  }
+
+  /* ==========================================================
+     OCR Template
+  ========================================================== */
+
+  function getOcrTemplateSheet() {
+
+    return getOrCreateSheet(
+      OCR_TEMPLATE_SHEET_NAME,
+      OCR_TEMPLATE_HEADERS
+    );
+
+  }
+
+  function validateOcrTemplateInput(data, requireTemplate) {
+
+    if (!data) {
+
+      throw new Error("缺少資料");
+
+    }
+
+    const user = String(data.user || "").trim();
+
+    if (!user) {
+
+      throw new Error("缺少使用者");
+
+    }
+
+    if (!requireTemplate) {
+
+      return {
+        user: user
+      };
+
+    }
+
+    return {
+      user: user,
+      sys: validateOcrRect(data.sys, "SYS"),
+      dia: validateOcrRect(data.dia, "DIA"),
+      pulse: validateOcrRect(data.pulse, "Pulse")
+    };
+
+  }
+
+  function validateOcrRect(value, label) {
+
+    const rect = typeof value === "string"
+      ? JSON.parse(value)
+      : value;
+
+    if (!rect || typeof rect !== "object") {
+
+      throw new Error(label + " OCR 位置錯誤");
+
+    }
+
+    const x = Number(rect.x);
+    const y = Number(rect.y);
+    const width = Number(rect.width);
+    const height = Number(rect.height);
+
+    if (
+      !Number.isFinite(x) ||
+      !Number.isFinite(y) ||
+      !Number.isFinite(width) ||
+      !Number.isFinite(height) ||
+      x < 0 ||
+      y < 0 ||
+      width <= 0 ||
+      height <= 0 ||
+      x + width > 1.01 ||
+      y + height > 1.01
+    ) {
+
+      throw new Error(label + " OCR 位置超出範圍");
+
+    }
+
+    return {
+      x: x,
+      y: y,
+      width: width,
+      height: height
+    };
+
+  }
+
+  function createOcrTemplateRow(template, updatedAt) {
+
+    return [
+      template.user,
+      template.sys.x,
+      template.sys.y,
+      template.sys.width,
+      template.sys.height,
+      template.dia.x,
+      template.dia.y,
+      template.dia.width,
+      template.dia.height,
+      template.pulse.x,
+      template.pulse.y,
+      template.pulse.width,
+      template.pulse.height,
+      Utilities.formatDate(updatedAt || new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm:ss")
+    ];
+
+  }
+
+  function readOcrTemplateRow(row) {
+
+    if (!row || row.length < OCR_TEMPLATE_HEADERS.length) {
+
+      return null;
+
+    }
+
+    return {
+      user: String(row[0] || "").trim(),
+      sys: {
+        x: Number(row[1]),
+        y: Number(row[2]),
+        width: Number(row[3]),
+        height: Number(row[4])
+      },
+      dia: {
+        x: Number(row[5]),
+        y: Number(row[6]),
+        width: Number(row[7]),
+        height: Number(row[8])
+      },
+      pulse: {
+        x: Number(row[9]),
+        y: Number(row[10]),
+        width: Number(row[11]),
+        height: Number(row[12])
+      },
+      updatedAt: row[13]
+    };
+
+  }
+
+  function findOcrTemplateRow(values, user) {
+
+    for (let i = 1; i < values.length; i++) {
+
+      if (String(values[i][0] || "").trim() === user) {
+
+        return i;
+
+      }
+
+    }
+
+    return -1;
+
+  }
+
+  function getOcrTemplate(data) {
+
+    const input = validateOcrTemplateInput(data, false);
+
+    const ws = getOcrTemplateSheet();
+
+    const values = ws.getDataRange().getValues();
+
+    const rowIndex = findOcrTemplateRow(values, input.user);
+
+    if (rowIndex < 0) {
+
+      return successResponse("", null);
+
+    }
+
+    return successResponse("", readOcrTemplateRow(values[rowIndex]));
+
+  }
+
+  function saveOcrTemplate(data) {
+
+    const lock = LockService.getDocumentLock();
+
+    lock.waitLock(3000);
+
+    try {
+
+      const template = validateOcrTemplateInput(data, true);
+
+      const ws = getOcrTemplateSheet();
+
+      const values = ws.getDataRange().getValues();
+
+      const rowIndex = findOcrTemplateRow(values, template.user);
+
+      const row = createOcrTemplateRow(template, new Date());
+
+      if (rowIndex >= 0) {
+
+        ws
+          .getRange(rowIndex + 1, 1, 1, OCR_TEMPLATE_HEADERS.length)
+          .setValues([row]);
+
+      } else {
+
+        ws.appendRow(row);
+
+      }
+
+      return successResponse("OCR 設定已儲存", readOcrTemplateRow(row));
+
+    }
+
+    finally {
+
+      lock.releaseLock();
+
+    }
+
+  }
+
+  function deleteOcrTemplate(data) {
+
+    const lock = LockService.getDocumentLock();
+
+    lock.waitLock(3000);
+
+    try {
+
+      const input = validateOcrTemplateInput(data, false);
+
+      const ws = getOcrTemplateSheet();
+
+      const values = ws.getDataRange().getValues();
+
+      const rowIndex = findOcrTemplateRow(values, input.user);
+
+      if (rowIndex >= 0) {
+
+        ws.deleteRow(rowIndex + 1);
+
+      }
+
+      return successResponse("OCR 設定已刪除", {
+        user: input.user
+      });
+
+    }
+
+    finally {
+
+      lock.releaseLock();
+
+    }
 
   }
   

@@ -33,13 +33,27 @@ const App = {
 
     localUserOptionsKey: "bp-user-options",
 
+    ocrTemplatesKey: "bp-ocr-templates",
+
     ocr: {
 
         recognizing: false,
 
         objectUrl: "",
 
-        stream: null
+        stream: null,
+
+        templateStream: null,
+
+        templateImage: null,
+
+        templateRects: {},
+
+        templateStep: "sys",
+
+        templateDragging: false,
+
+        templateDragStart: null
 
     },
 
@@ -83,6 +97,9 @@ const App = {
         this.loadToday();
 
         this.loadUserOptions();
+
+        this.updateOcrTemplateStatus();
+        this.loadCurrentOcrTemplate();
     
     },
 
@@ -274,6 +291,26 @@ const App = {
 
             settingsSaveBtn: document.getElementById("settingsSaveBtn"),
 
+            ocrTemplateStatus: document.getElementById("ocrTemplateStatus"),
+
+            ocrTemplateStartBtn: document.getElementById("ocrTemplateStartBtn"),
+
+            ocrTemplateClearBtn: document.getElementById("ocrTemplateClearBtn"),
+
+            ocrTemplatePanel: document.getElementById("ocrTemplatePanel"),
+
+            ocrTemplateVideo: document.getElementById("ocrTemplateVideo"),
+
+            ocrTemplateCanvas: document.getElementById("ocrTemplateCanvas"),
+
+            ocrTemplateHint: document.getElementById("ocrTemplateHint"),
+
+            ocrTemplateCaptureBtn: document.getElementById("ocrTemplateCaptureBtn"),
+
+            ocrTemplateCancelBtn: document.getElementById("ocrTemplateCancelBtn"),
+
+            ocrTemplateSteps: document.querySelectorAll(".ocr-template-step"),
+
             tabs: document.querySelectorAll(".tab"),
 
             pages: document.querySelectorAll(".page"),
@@ -368,6 +405,8 @@ const App = {
 
         }
 
+        this.bindOcrTemplateEvents();
+
     },
 
     bindOcrEvents() {
@@ -413,6 +452,78 @@ const App = {
             });
 
         }
+
+    },
+
+    bindOcrTemplateEvents() {
+
+        if (this.elements.ocrTemplateStartBtn) {
+
+            this.elements.ocrTemplateStartBtn.addEventListener("click", async () => {
+
+                await this.startOcrTemplateSetup();
+
+            });
+
+        }
+
+        if (this.elements.ocrTemplateCaptureBtn) {
+
+            this.elements.ocrTemplateCaptureBtn.addEventListener("click", () => {
+
+                this.captureOcrTemplateImage();
+
+            });
+
+        }
+
+        if (this.elements.ocrTemplateCancelBtn) {
+
+            this.elements.ocrTemplateCancelBtn.addEventListener("click", () => {
+
+                this.cancelOcrTemplateSetup();
+
+            });
+
+        }
+
+        if (this.elements.ocrTemplateClearBtn) {
+
+            this.elements.ocrTemplateClearBtn.addEventListener("click", () => {
+
+                this.clearCurrentOcrTemplate();
+
+            });
+
+        }
+
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!canvas) return;
+
+        canvas.addEventListener("pointerdown", event => {
+
+            this.startOcrTemplateDrag(event);
+
+        });
+
+        canvas.addEventListener("pointermove", event => {
+
+            this.moveOcrTemplateDrag(event);
+
+        });
+
+        canvas.addEventListener("pointerup", event => {
+
+            this.endOcrTemplateDrag(event);
+
+        });
+
+        canvas.addEventListener("pointercancel", event => {
+
+            this.endOcrTemplateDrag(event);
+
+        });
 
     },
 
@@ -553,6 +664,425 @@ const App = {
     hideLoading() {
 
         this.elements.loading.classList.add("hidden");
+
+    },
+
+    /* ==========================================
+       OCR Template Settings
+    ========================================== */
+
+    getOcrTemplates() {
+
+        try {
+
+            const data = JSON.parse(
+                localStorage.getItem(this.ocrTemplatesKey) || "{}"
+            );
+
+            return data && typeof data === "object" ? data : {};
+
+        }
+
+        catch (err) {
+
+            console.error("[OCR Template] parse failed", err);
+
+            return {};
+
+        }
+
+    },
+
+    getCurrentOcrTemplate() {
+
+        return this.getOcrTemplates()[this.getUserName()] || null;
+
+    },
+
+    async loadCurrentOcrTemplate() {
+
+        if (typeof getOcrTemplate !== "function") {
+
+            return;
+
+        }
+
+        const user = this.getUserName();
+        const result = await getOcrTemplate(user);
+
+        if (!result.success || !result.data) {
+
+            this.updateOcrTemplateStatus();
+
+            return;
+
+        }
+
+        const templates = this.getOcrTemplates();
+
+        templates[user] = result.data;
+
+        localStorage.setItem(this.ocrTemplatesKey, JSON.stringify(templates));
+        this.updateOcrTemplateStatus();
+
+    },
+
+    async saveCurrentOcrTemplate(template) {
+
+        const templates = this.getOcrTemplates();
+        const user = this.getUserName();
+
+        templates[user] = {
+            ...template,
+            updatedAt: new Date().toISOString()
+        };
+
+        localStorage.setItem(this.ocrTemplatesKey, JSON.stringify(templates));
+        this.updateOcrTemplateStatus();
+
+        if (typeof saveOcrTemplate === "function") {
+
+            const result = await saveOcrTemplate(user, template);
+
+            if (!result.success) {
+
+                this.showToast("已儲存在本機，雲端同步失敗");
+
+            }
+
+        }
+
+    },
+
+    async clearCurrentOcrTemplate() {
+
+        const templates = this.getOcrTemplates();
+        const user = this.getUserName();
+
+        delete templates[user];
+
+        localStorage.setItem(this.ocrTemplatesKey, JSON.stringify(templates));
+        this.updateOcrTemplateStatus();
+
+        if (typeof deleteOcrTemplate === "function") {
+
+            const result = await deleteOcrTemplate(user);
+
+            if (!result.success) {
+
+                this.showToast("已清除本機設定，雲端同步失敗");
+
+                return;
+
+            }
+
+        }
+
+        this.showToast("已清除 OCR 設定");
+
+    },
+
+    updateOcrTemplateStatus() {
+
+        if (!this.elements.ocrTemplateStatus) return;
+
+        const template = this.getCurrentOcrTemplate();
+
+        this.elements.ocrTemplateStatus.textContent = template
+            ? "已設定目前使用者的 OCR 位置"
+            : "尚未設定目前使用者的 OCR 位置";
+
+    },
+
+    async startOcrTemplateSetup() {
+
+        if (
+            !navigator.mediaDevices ||
+            typeof navigator.mediaDevices.getUserMedia !== "function"
+        ) {
+
+            this.showToast("無法開啟相機");
+
+            return;
+
+        }
+
+        this.ocr.templateRects = {};
+        this.ocr.templateStep = "sys";
+        this.ocr.templateImage = null;
+        this.updateOcrTemplateHint();
+        this.syncOcrTemplateSteps();
+
+        if (this.elements.ocrTemplatePanel) {
+
+            this.elements.ocrTemplatePanel.hidden = false;
+
+        }
+
+        if (this.elements.ocrTemplateCanvas) {
+
+            this.elements.ocrTemplateCanvas.hidden = true;
+
+        }
+
+        try {
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: {
+                        ideal: "environment"
+                    }
+                },
+                audio: false
+            });
+
+            this.ocr.templateStream = stream;
+
+            if (this.elements.ocrTemplateVideo) {
+
+                this.elements.ocrTemplateVideo.srcObject = stream;
+                this.elements.ocrTemplateVideo.hidden = false;
+
+            }
+
+        }
+
+        catch (err) {
+
+            console.error("[OCR Template Camera]", err);
+            this.showToast("無法開啟相機");
+            this.cancelOcrTemplateSetup();
+
+        }
+
+    },
+
+    captureOcrTemplateImage() {
+
+        const video = this.elements.ocrTemplateVideo;
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!video || !canvas || !video.videoWidth || !video.videoHeight) {
+
+            this.showToast("相機尚未準備好");
+
+            return;
+
+        }
+
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        const image = new Image();
+
+        image.onload = () => {
+
+            this.ocr.templateImage = image;
+            this.stopOcrTemplateCamera();
+            video.hidden = true;
+            canvas.hidden = false;
+            this.drawOcrTemplateCanvas();
+            this.updateOcrTemplateHint();
+
+        };
+
+        image.src = canvas.toDataURL("image/jpeg", .92);
+
+    },
+
+    stopOcrTemplateCamera() {
+
+        if (this.ocr.templateStream) {
+
+            this.ocr.templateStream.getTracks().forEach(track => track.stop());
+            this.ocr.templateStream = null;
+
+        }
+
+        if (this.elements.ocrTemplateVideo) {
+
+            this.elements.ocrTemplateVideo.srcObject = null;
+
+        }
+
+    },
+
+    cancelOcrTemplateSetup() {
+
+        this.stopOcrTemplateCamera();
+
+        if (this.elements.ocrTemplatePanel) {
+
+            this.elements.ocrTemplatePanel.hidden = true;
+
+        }
+
+    },
+
+    getOcrTemplatePointer(event) {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+
+        return {
+            x: Math.max(0, Math.min(canvas.width, (event.clientX - rect.left) * scaleX)),
+            y: Math.max(0, Math.min(canvas.height, (event.clientY - rect.top) * scaleY))
+        };
+
+    },
+
+    startOcrTemplateDrag(event) {
+
+        if (!this.ocr.templateImage) return;
+
+        event.preventDefault();
+        this.elements.ocrTemplateCanvas.setPointerCapture(event.pointerId);
+        this.ocr.templateDragging = true;
+        this.ocr.templateDragStart = this.getOcrTemplatePointer(event);
+
+    },
+
+    moveOcrTemplateDrag(event) {
+
+        if (!this.ocr.templateDragging || !this.ocr.templateDragStart) return;
+
+        const point = this.getOcrTemplatePointer(event);
+
+        this.ocr.templateRects[this.ocr.templateStep] =
+            this.createNormalizedRect(this.ocr.templateDragStart, point);
+
+        this.drawOcrTemplateCanvas();
+
+    },
+
+    async endOcrTemplateDrag(event) {
+
+        if (!this.ocr.templateDragging) return;
+
+        this.moveOcrTemplateDrag(event);
+        this.ocr.templateDragging = false;
+        this.ocr.templateDragStart = null;
+        await this.advanceOcrTemplateStep();
+
+    },
+
+    createNormalizedRect(start, end) {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+        const left = Math.min(start.x, end.x);
+        const top = Math.min(start.y, end.y);
+        const width = Math.abs(end.x - start.x);
+        const height = Math.abs(end.y - start.y);
+
+        return {
+            x: left / canvas.width,
+            y: top / canvas.height,
+            width: width / canvas.width,
+            height: height / canvas.height
+        };
+
+    },
+
+    async advanceOcrTemplateStep() {
+
+        const steps = ["sys", "dia", "pulse"];
+        const currentIndex = steps.indexOf(this.ocr.templateStep);
+        const rect = this.ocr.templateRects[this.ocr.templateStep];
+
+        if (!rect || rect.width < .02 || rect.height < .02) {
+
+            this.showToast("請框選較大的數字區域");
+
+            return;
+
+        }
+
+        if (currentIndex < steps.length - 1) {
+
+            this.ocr.templateStep = steps[currentIndex + 1];
+            this.syncOcrTemplateSteps();
+            this.updateOcrTemplateHint();
+
+            return;
+
+        }
+
+        await this.saveCurrentOcrTemplate({
+            sys: this.ocr.templateRects.sys,
+            dia: this.ocr.templateRects.dia,
+            pulse: this.ocr.templateRects.pulse
+        });
+        this.cancelOcrTemplateSetup();
+        this.showToast("已儲存 OCR 位置");
+
+    },
+
+    drawOcrTemplateCanvas() {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!canvas || !this.ocr.templateImage) return;
+
+        const ctx = canvas.getContext("2d");
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(this.ocr.templateImage, 0, 0, canvas.width, canvas.height);
+
+        Object.keys(this.ocr.templateRects).forEach(key => {
+
+            const rect = this.ocr.templateRects[key];
+            const x = rect.x * canvas.width;
+            const y = rect.y * canvas.height;
+            const width = rect.width * canvas.width;
+            const height = rect.height * canvas.height;
+
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = key === this.ocr.templateStep ? "#007AFF" : "#34C759";
+            ctx.strokeRect(x, y, width, height);
+            ctx.fillStyle = "rgba(0,122,255,.18)";
+            ctx.fillRect(x, y, width, height);
+
+        });
+
+    },
+
+    syncOcrTemplateSteps() {
+
+        this.elements.ocrTemplateSteps.forEach(step => {
+
+            step.classList.toggle(
+                "active",
+                step.dataset.templateStep === this.ocr.templateStep
+            );
+
+            step.classList.toggle(
+                "done",
+                Boolean(this.ocr.templateRects[step.dataset.templateStep])
+            );
+
+        });
+
+    },
+
+    updateOcrTemplateHint() {
+
+        if (!this.elements.ocrTemplateHint) return;
+
+        const labels = {
+            sys: "請拖曳框選 SYS 數字",
+            dia: "請拖曳框選 DIA 數字",
+            pulse: "請拖曳框選 Pulse 數字"
+        };
+
+        this.elements.ocrTemplateHint.textContent =
+            this.ocr.templateImage
+                ? labels[this.ocr.templateStep]
+                : "請拍下血壓計螢幕";
 
     },
 
@@ -708,30 +1238,23 @@ const App = {
 
         try {
 
-            const images = await this.prepareOcrImages(source);
-            let values = null;
+            let values = await this.recognizeBloodPressureWithTemplate(source);
 
-            for (const image of images) {
+            if (!values) {
 
-                const result = await Tesseract.recognize(
-                    image,
-                    "eng",
-                    {
-                        logger: progress => this.updateOcrProgress(progress),
-                        tessedit_pageseg_mode: "6",
-                        user_defined_dpi: "300",
-                        tessedit_char_whitelist:
-                            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz血壓压收縮缩舒張张脈脉搏拍心率高低/: "
+                const images = await this.prepareOcrImages(source);
+
+                for (const image of images) {
+
+                    const text = await this.recognizeOcrCanvas(image, "6");
+
+                    values = this.extractBloodPressureValues(text);
+
+                    if (values) {
+
+                        break;
+
                     }
-                );
-
-                values = this.extractBloodPressureValues(
-                    result && result.data ? result.data.text : ""
-                );
-
-                if (values) {
-
-                    break;
 
                 }
 
@@ -765,6 +1288,129 @@ const App = {
             this.hideLoading();
 
         }
+
+    },
+
+    async recognizeOcrCanvas(canvas, pageSegMode = "6") {
+
+        const result = await Tesseract.recognize(
+            canvas,
+            "eng",
+            {
+                logger: progress => this.updateOcrProgress(progress),
+                tessedit_pageseg_mode: pageSegMode,
+                user_defined_dpi: "300",
+                tessedit_char_whitelist:
+                    "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz血壓压收縮缩舒張张脈脉搏拍心率高低/: "
+            }
+        );
+
+        return result && result.data ? result.data.text : "";
+
+    },
+
+    async recognizeBloodPressureWithTemplate(source) {
+
+        const template = this.getCurrentOcrTemplate();
+
+        if (!template) return null;
+
+        const bitmap =
+            source instanceof HTMLCanvasElement
+                ? source
+                : await this.loadOcrBitmap(source);
+        const fields = {
+            sys: {
+                rect: template.sys,
+                range: [50, 280]
+            },
+            dia: {
+                rect: template.dia,
+                range: [30, 180]
+            },
+            pulse: {
+                rect: template.pulse,
+                range: [30, 220]
+            }
+        };
+        const values = {};
+
+        for (const key of Object.keys(fields)) {
+
+            const value = await this.recognizeTemplateField(
+                bitmap,
+                fields[key].rect,
+                fields[key].range
+            );
+
+            if (!Number.isFinite(value)) {
+
+                return null;
+
+            }
+
+            values[key] = value;
+
+        }
+
+        return this.isOcrBloodPressureValid(
+            values.sys,
+            values.dia,
+            values.pulse
+        )
+            ? values
+            : null;
+
+    },
+
+    async recognizeTemplateField(bitmap, rect, range) {
+
+        if (!rect) return null;
+
+        const crop = {
+            x: rect.x * bitmap.width,
+            y: rect.y * bitmap.height,
+            width: rect.width * bitmap.width,
+            height: rect.height * bitmap.height
+        };
+        const images = [
+            this.createOcrCanvas(bitmap, crop, "lcd"),
+            this.createOcrCanvas(bitmap, crop, "contrast"),
+            this.createOcrCanvas(bitmap, crop, "threshold"),
+            this.createOcrCanvas(bitmap, crop, "grayscale")
+        ];
+
+        for (const image of images) {
+
+            const text = await this.recognizeOcrCanvas(image, "7");
+            const value = this.extractSingleOcrNumber(text, range);
+
+            if (Number.isFinite(value)) {
+
+                return value;
+
+            }
+
+        }
+
+        return null;
+
+    },
+
+    extractSingleOcrNumber(text, range) {
+
+        const candidates = (
+            String(text || "").match(/\b[0-9OQILSB]{2,3}\b/g) || []
+        )
+            .filter(value => /\d/.test(value))
+            .map(value => Number(this.normalizeOcrNumberToken(value)))
+            .filter(value => (
+                Number.isFinite(value) &&
+                value >= range[0] &&
+                value <= range[1]
+            ));
+
+        return candidates.length ? candidates[0] : null;
 
     },
 
@@ -1487,6 +2133,8 @@ const App = {
 
         this.renderUserOptions();
         this.renderGreeting();
+        this.updateOcrTemplateStatus();
+        this.loadCurrentOcrTemplate();
 
     },
 
@@ -1513,6 +2161,8 @@ const App = {
         localStorage.setItem("bp-user", userName);
         this.saveLocalUserOption(userName);
         this.renderGreeting();
+        this.updateOcrTemplateStatus();
+        this.loadCurrentOcrTemplate();
         this.showToast("已新增使用者");
 
     },
@@ -1536,6 +2186,7 @@ const App = {
 
         this.saveLocalUserOption(userName);
         this.renderUserOptions();
+        this.updateOcrTemplateStatus();
 
         await this.refreshToday();
 
