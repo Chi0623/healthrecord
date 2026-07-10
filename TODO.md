@@ -4,6 +4,7 @@
 
 ### 高優先（High Priority）
 
+- UAT-011 CSV 匯出
 - PWA 安裝
 - RC3 完整驗收與文件同步
 - v1.0 Release Readiness 檢查
@@ -11,7 +12,6 @@
 ### 中優先（Medium Priority）
 
 - PDF 匯出
-- CSV 匯出
 - 分享給醫師
 - 多位使用者切換
 - 備份與還原

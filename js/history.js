@@ -53,6 +53,10 @@ const History = {
 
     endDateInput: null,
 
+    exportButton: null,
+
+    exportSummaryElement: null,
+
     allRecords: [],
 
     records: [],
@@ -85,6 +89,12 @@ const History = {
 
         this.endDateInput =
             document.getElementById("historyEndDate");
+
+        this.exportButton =
+            document.getElementById("historyExportBtn");
+
+        this.exportSummaryElement =
+            document.getElementById("historyExportSummary");
     
         if (!this.listElement) {
     
@@ -95,6 +105,10 @@ const History = {
         }
 
         this.bindFilterEvents();
+
+        this.bindExportEvents();
+
+        this.syncExportState();
     
     },
 
@@ -147,6 +161,22 @@ const History = {
         this.syncFilterButtons();
 
         this.syncAdvancedFilters();
+
+    },
+
+    bindExportEvents() {
+
+        if (!this.exportButton) {
+
+            return;
+
+        }
+
+        this.exportButton.addEventListener("click", async () => {
+
+            await this.exportCsv();
+
+        });
 
     },
 
@@ -347,6 +377,8 @@ const History = {
 
         this.records = this.getFilteredRecords();
 
+        this.syncExportState();
+
         if (!this.records.length) {
 
             this.renderEmpty(this.allRecords.length > 0);
@@ -510,6 +542,12 @@ const History = {
         const status = this.getBpStatus(record);
 
         const period = this.getDayPeriod(dateValue);
+
+        if (status.className === "is-caution" || status.className === "is-high") {
+
+            card.classList.add("is-caution-reading");
+
+        }
 
         const header = document.createElement("div");
 
@@ -710,6 +748,8 @@ const History = {
 
         this.records = [];
 
+        this.syncExportState();
+
         this.listElement.textContent = "";
 
         const empty = document.createElement("div");
@@ -729,6 +769,8 @@ const History = {
         if (!this.listElement) return;
 
         this.records = [];
+
+        this.syncExportState();
 
         this.listElement.textContent = "";
 
@@ -895,6 +937,332 @@ const History = {
         }
 
         return status.className.replace("is-", "");
+
+    },
+
+    syncExportState() {
+
+        if (this.exportSummaryElement) {
+
+            this.exportSummaryElement.textContent =
+                this.getExportSummaryText();
+
+        }
+
+        if (this.exportButton) {
+
+            this.exportButton.disabled = !this.getExportRecords().length;
+
+        }
+
+    },
+
+    getExportRecords() {
+
+        return [...this.records].sort(
+            (a, b) => this.getTimeValue(b.datetime) - this.getTimeValue(a.datetime)
+        );
+
+    },
+
+    getExportSummaryText() {
+
+        const count = this.getExportRecords().length;
+
+        if (!this.allRecords.length) {
+
+            return "目前沒有可匯出的紀錄";
+
+        }
+
+        if (!count) {
+
+            return "目前篩選條件沒有可匯出的紀錄";
+
+        }
+
+        return `目前可匯出 ${count} 筆`;
+
+    },
+
+    async exportCsv() {
+
+        const records = this.getExportRecords();
+
+        if (!records.length) {
+
+            this.showExportMessage(this.getExportSummaryText());
+
+            return;
+
+        }
+
+        const csv = this.buildCsv(records);
+
+        const fileName = this.getExportFileName(records);
+
+        await this.shareOrDownloadCsv(csv, fileName);
+
+    },
+
+    buildCsv(records) {
+
+        const rows = [
+            this.getCsvHeaders(),
+            ...records.map(record => this.mapRecordToCsvRow(record))
+        ];
+
+        return `\ufeff${rows.map(row => this.buildCsvRow(row)).join("\r\n")}`;
+
+    },
+
+    getCsvHeaders() {
+
+        return [
+            "姓名",
+            "日期",
+            "時間",
+            "時段",
+            "SYS",
+            "DIA",
+            "Pulse",
+            "不規則心跳",
+            "血壓燈號",
+            "RecordID"
+        ];
+
+    },
+
+    mapRecordToCsvRow(record) {
+
+        const date = this.parseDate(record.datetime);
+
+        const period = this.getDayPeriod(date);
+
+        const status = this.getBpStatus(record);
+
+        return [
+            record.user || localStorage.getItem("bp-user") || "使用者",
+            this.formatCsvDate(date),
+            this.formatCsvTime(date),
+            period.label,
+            Number(record.sys),
+            Number(record.dia),
+            Number(record.pulse),
+            record.ihb === true ? "是" : "否",
+            this.getCsvStatusLabel(status.label),
+            record.id || ""
+        ];
+
+    },
+
+    buildCsvRow(values) {
+
+        return values
+            .map(value => this.escapeCsvValue(value))
+            .join(",");
+
+    },
+
+    escapeCsvValue(value) {
+
+        const text = value === null || value === undefined
+            ? ""
+            : String(value);
+
+        if (!/[",\r\n]/.test(text)) {
+
+            return text;
+
+        }
+
+        return `"${text.replace(/"/g, '""')}"`;
+
+    },
+
+    getCsvStatusLabel(label) {
+
+        return String(label || "")
+            .replace(/[🟢🔵🟡🟠🔴⚫]/g, "")
+            .trim();
+
+    },
+
+    formatCsvDate(date) {
+
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+
+            return "";
+
+        }
+
+        return [
+            date.getFullYear(),
+            String(date.getMonth() + 1).padStart(2, "0"),
+            String(date.getDate()).padStart(2, "0")
+        ].join("-");
+
+    },
+
+    formatCsvTime(date) {
+
+        if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+
+            return "";
+
+        }
+
+        return [
+            String(date.getHours()).padStart(2, "0"),
+            String(date.getMinutes()).padStart(2, "0")
+        ].join(":");
+
+    },
+
+    getExportFileName(records) {
+
+        const user = this.sanitizeFileName(
+            localStorage.getItem("bp-user") || "使用者"
+        );
+
+        const dates = records
+            .map(record => this.parseDate(record.datetime))
+            .filter(date => date instanceof Date && !Number.isNaN(date.getTime()))
+            .sort((a, b) => a.getTime() - b.getTime());
+
+        const first = dates[0] || new Date();
+
+        const last = dates[dates.length - 1] || first;
+
+        const range = this.formatFileDate(first) === this.formatFileDate(last)
+            ? this.formatFileDate(first)
+            : `${this.formatFileDate(first)}-${this.formatFileDate(last)}`;
+
+        return `SafeBP_血壓紀錄_${user}_${range}.csv`;
+
+    },
+
+    formatFileDate(date) {
+
+        return this.formatCsvDate(date).replace(/-/g, "");
+
+    },
+
+    sanitizeFileName(value) {
+
+        return String(value || "使用者")
+            .trim()
+            .replace(/[\\/:*?"<>|,\r\n]+/g, "_") || "使用者";
+
+    },
+
+    async shareOrDownloadCsv(csv, fileName) {
+
+        const blob = new Blob([csv], {
+            type: "text/csv;charset=utf-8"
+        });
+
+        if (typeof File !== "function") {
+
+            this.downloadCsvFile(blob, fileName);
+
+            return;
+
+        }
+
+        const file = new File([blob], fileName, {
+            type: "text/csv"
+        });
+
+        if (this.canShareFile(file)) {
+
+            const shared = await this.shareCsvFile(file, fileName);
+
+            if (shared) {
+
+                return;
+
+            }
+
+        }
+
+        this.downloadCsvFile(blob, fileName);
+
+    },
+
+    canShareFile(file) {
+
+        return (
+            typeof navigator !== "undefined" &&
+            typeof navigator.share === "function" &&
+            typeof navigator.canShare === "function" &&
+            navigator.canShare({ files: [file] })
+        );
+
+    },
+
+    async shareCsvFile(file, fileName) {
+
+        try {
+
+            await navigator.share({
+                files: [file],
+                title: "安心血壓 CSV",
+                text: fileName
+            });
+
+            return true;
+
+        }
+
+        catch (err) {
+
+            if (err && err.name === "AbortError") {
+
+                return true;
+
+            }
+
+            console.warn("CSV 分享失敗，改用下載", err);
+
+            return false;
+
+        }
+
+    },
+
+    downloadCsvFile(blob, fileName) {
+
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+
+        link.href = url;
+
+        link.download = fileName;
+
+        document.body.appendChild(link);
+
+        link.click();
+
+        link.remove();
+
+        URL.revokeObjectURL(url);
+
+        this.showExportMessage("已準備 CSV 檔案");
+
+    },
+
+    showExportMessage(message) {
+
+        if (
+            typeof App !== "undefined" &&
+            typeof App.showToast === "function"
+        ) {
+
+            App.showToast(message);
+
+        }
 
     },
 

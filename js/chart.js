@@ -478,14 +478,35 @@ const ChartPage = {
         this.setMetricField(this.summaryFields.todaySys, summary.today.sys, "今日平均收縮壓");
         this.setMetricField(this.summaryFields.todayDia, summary.today.dia, "今日平均舒張壓");
         this.setMetricField(this.summaryFields.todayPulse, summary.today.pulse, "今日平均脈搏");
+        this.markBloodPressureMetricPair(
+            this.summaryFields.todaySys,
+            this.summaryFields.todayDia,
+            this.summaryFields.todayPulse,
+            summary.today.sys,
+            summary.today.dia
+        );
 
         this.setMetricField(this.summaryFields.weekSys, summary.week.sys, "本週平均收縮壓");
         this.setMetricField(this.summaryFields.weekDia, summary.week.dia, "本週平均舒張壓");
         this.setMetricField(this.summaryFields.weekPulse, summary.week.pulse, "本週平均脈搏");
+        this.markBloodPressureMetricPair(
+            this.summaryFields.weekSys,
+            this.summaryFields.weekDia,
+            this.summaryFields.weekPulse,
+            summary.week.sys,
+            summary.week.dia
+        );
 
         this.setMetricField(this.summaryFields.monthSys, summary.month.sys, "本月平均收縮壓");
         this.setMetricField(this.summaryFields.monthDia, summary.month.dia, "本月平均舒張壓");
         this.setMetricField(this.summaryFields.monthPulse, summary.month.pulse, "本月平均脈搏");
+        this.markBloodPressureMetricPair(
+            this.summaryFields.monthSys,
+            this.summaryFields.monthDia,
+            this.summaryFields.monthPulse,
+            summary.month.sys,
+            summary.month.dia
+        );
 
     },
 
@@ -498,6 +519,22 @@ const ChartPage = {
         this.setText(this.statFields.minSys, stats.minSys);
         this.setText(this.statFields.minDia, stats.minDia);
         this.setText(this.statFields.minPulse, stats.minPulse);
+
+        this.markBloodPressureMetricPair(
+            this.statFields.maxSys,
+            this.statFields.maxDia,
+            this.statFields.maxPulse,
+            stats.maxSys,
+            stats.maxDia
+        );
+
+        this.markBloodPressureMetricPair(
+            this.statFields.minSys,
+            this.statFields.minDia,
+            this.statFields.minPulse,
+            stats.minSys,
+            stats.minDia
+        );
 
     },
 
@@ -930,6 +967,12 @@ const ChartPage = {
 
             this.setMetricField(this.summaryFields[key], "--", "");
 
+            if (this.summaryFields[key]) {
+
+                this.summaryFields[key].classList.remove("is-caution-reading");
+
+            }
+
         });
 
     },
@@ -943,6 +986,16 @@ const ChartPage = {
         this.setText(this.statFields.minSys, "--");
         this.setText(this.statFields.minDia, "--");
         this.setText(this.statFields.minPulse, "--");
+
+        Object.keys(this.statFields).forEach(key => {
+
+            if (this.statFields[key]) {
+
+                this.statFields[key].classList.remove("is-caution-reading");
+
+            }
+
+        });
 
     },
 
@@ -988,6 +1041,21 @@ const ChartPage = {
         }
 
         element.textContent = value;
+
+    },
+
+    markBloodPressureMetricPair(sysElement, diaElement, pulseElement, sys, dia) {
+
+        const statusKey = this.getStatusKey(sys, dia);
+        const isCautionReading = statusKey === "caution" || statusKey === "high";
+
+        [sysElement, diaElement, pulseElement].forEach(element => {
+
+            if (!element) return;
+
+            element.classList.toggle("is-caution-reading", isCautionReading);
+
+        });
 
     },
 

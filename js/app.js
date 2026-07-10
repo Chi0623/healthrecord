@@ -31,6 +31,18 @@ const App = {
     
     },
 
+    localUserOptionsKey: "bp-user-options",
+
+    ocr: {
+
+        recognizing: false,
+
+        objectUrl: "",
+
+        stream: null
+
+    },
+
     /* ==========================================
        DOM
     ========================================== */
@@ -46,7 +58,7 @@ const App = {
         this.cacheElements();
 
         // 初始化按鈕文字
-        this.elements.saveBtn.textContent = "儲存紀錄";
+        this.setSaveButtonLabel("儲存紀錄");
 
         this.bindViewportEvents();
 
@@ -210,6 +222,8 @@ const App = {
 
             saveBtn: document.getElementById("saveBtn"),
 
+            saveBtnLabel: document.querySelector("#saveBtn span"),
+
             toast: document.getElementById("toast"),
 
             loading: document.getElementById("loadingOverlay"),
@@ -234,15 +248,31 @@ const App = {
 
             todayStatus: document.getElementById("todayStatus"),
 
-            settingsApiUrl: document.getElementById("settingsApiUrl"),
+            ocrCaptureBtn: document.getElementById("ocrCaptureBtn"),
 
-            settingsUserName: document.getElementById("settingsUserName"),
+            ocrCameraPanel: document.getElementById("ocrCameraPanel"),
+
+            ocrCameraVideo: document.getElementById("ocrCameraVideo"),
+
+            ocrShutterBtn: document.getElementById("ocrShutterBtn"),
+
+            ocrCancelBtn: document.getElementById("ocrCancelBtn"),
+
+            ocrStatus: document.getElementById("ocrStatus"),
+
+            ocrPreviewWrap: document.getElementById("ocrPreviewWrap"),
+
+            ocrPreview: document.getElementById("ocrPreview"),
+
+            ocrClearBtn: document.getElementById("ocrClearBtn"),
+
+            settingsApiUrl: document.getElementById("settingsApiUrl"),
 
             settingsUserOptions: document.getElementById("settingsUserOptions"),
 
-            settingsSaveBtn: document.getElementById("settingsSaveBtn"),
+            settingsAddUserBtn: document.getElementById("settingsAddUserBtn"),
 
-            settingsReloadUsers: document.getElementById("settingsReloadUsers"),
+            settingsSaveBtn: document.getElementById("settingsSaveBtn"),
 
             tabs: document.querySelectorAll(".tab"),
 
@@ -304,6 +334,8 @@ const App = {
 
         );
 
+        this.bindOcrEvents();
+
         // Tabs
 
         this.elements.tabs.forEach(tab => {
@@ -326,15 +358,87 @@ const App = {
 
         }
 
-        if (this.elements.settingsReloadUsers) {
+        if (this.elements.settingsAddUserBtn) {
 
-            this.elements.settingsReloadUsers.addEventListener("click", async () => {
+            this.elements.settingsAddUserBtn.addEventListener("click", () => {
 
-                await this.loadUserOptions(true);
+                this.promptAddUser();
 
             });
 
         }
+
+    },
+
+    bindOcrEvents() {
+
+        if (this.elements.ocrCaptureBtn) {
+
+            this.elements.ocrCaptureBtn.addEventListener("click", async () => {
+
+                if (this.ocr.recognizing) return;
+
+                await this.startOcrCamera();
+
+            });
+
+        }
+
+        if (this.elements.ocrShutterBtn) {
+
+            this.elements.ocrShutterBtn.addEventListener("click", async () => {
+
+                await this.captureOcrFrame();
+
+            });
+
+        }
+
+        if (this.elements.ocrCancelBtn) {
+
+            this.elements.ocrCancelBtn.addEventListener("click", () => {
+
+                this.stopOcrCamera();
+
+            });
+
+        }
+
+        if (this.elements.ocrClearBtn) {
+
+            this.elements.ocrClearBtn.addEventListener("click", () => {
+
+                this.clearOcrImage();
+
+            });
+
+        }
+
+    },
+
+    setSaveButtonLabel(label) {
+
+        if (this.elements.saveBtnLabel) {
+
+            this.elements.saveBtnLabel.textContent = label;
+
+            return;
+
+        }
+
+        if (this.elements.saveBtn) {
+
+            this.elements.saveBtn.textContent = label;
+
+        }
+
+    },
+
+    getSaveButtonLabel() {
+
+        return this.elements.saveBtnLabel
+            ? this.elements.saveBtnLabel.textContent
+            : this.elements.saveBtn.textContent;
 
     },
 
@@ -434,11 +538,11 @@ const App = {
        Loading
     ========================================== */
 
-    showLoading() {
+    showLoading(message = "儲存中") {
 
         if (this.elements.loadingText) {
 
-            this.elements.loadingText.textContent = "儲存中";
+            this.elements.loadingText.textContent = message;
 
         }
 
@@ -449,6 +553,554 @@ const App = {
     hideLoading() {
 
         this.elements.loading.classList.add("hidden");
+
+    },
+
+    /* ==========================================
+       OCR
+    ========================================== */
+
+    async startOcrCamera() {
+
+        if (this.ocr.stream) {
+
+            this.showOcrCameraPanel();
+
+            return;
+
+        }
+
+        if (
+            !navigator.mediaDevices ||
+            typeof navigator.mediaDevices.getUserMedia !== "function"
+        ) {
+
+            this.setOcrStatus("此瀏覽器無法直接開啟相機，請改用手動輸入");
+            this.showToast("無法開啟相機");
+
+            return;
+
+        }
+
+        this.setOcrStatus("正在開啟相機");
+
+        try {
+
+            const stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: {
+                        ideal: "environment"
+                    }
+                },
+                audio: false
+            });
+
+            this.ocr.stream = stream;
+
+            if (this.elements.ocrCameraVideo) {
+
+                this.elements.ocrCameraVideo.srcObject = stream;
+
+            }
+
+            this.showOcrCameraPanel();
+            this.setOcrStatus("請對準血壓計螢幕後按拍下辨識");
+
+        }
+
+        catch (err) {
+
+            console.error("[OCR Camera]", err);
+            this.setOcrStatus("無法開啟相機，請確認瀏覽器權限");
+            this.showToast("無法開啟相機");
+
+        }
+
+    },
+
+    showOcrCameraPanel() {
+
+        if (this.elements.ocrCameraPanel) {
+
+            this.elements.ocrCameraPanel.hidden = false;
+
+        }
+
+    },
+
+    stopOcrCamera() {
+
+        if (this.ocr.stream) {
+
+            this.ocr.stream.getTracks().forEach(track => track.stop());
+            this.ocr.stream = null;
+
+        }
+
+        if (this.elements.ocrCameraVideo) {
+
+            this.elements.ocrCameraVideo.srcObject = null;
+
+        }
+
+        if (this.elements.ocrCameraPanel) {
+
+            this.elements.ocrCameraPanel.hidden = true;
+
+        }
+
+        if (!this.ocr.recognizing) {
+
+            this.setOcrStatus("");
+
+        }
+
+    },
+
+    async captureOcrFrame() {
+
+        if (!this.elements.ocrCameraVideo || this.ocr.recognizing) return;
+
+        const video = this.elements.ocrCameraVideo;
+
+        if (!video.videoWidth || !video.videoHeight) {
+
+            this.setOcrStatus("相機尚未準備好，請稍候");
+
+            return;
+
+        }
+
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+        await this.recognizeBloodPressureImage(canvas);
+
+    },
+
+    async recognizeBloodPressureImage(source) {
+
+        if (!source || this.ocr.recognizing) return;
+
+        if (!window.Tesseract) {
+
+            this.setOcrStatus("無法載入辨識工具，請改用手動輸入");
+            this.showToast("無法載入辨識工具");
+
+            return;
+
+        }
+
+        this.ocr.recognizing = true;
+        this.setOcrBusy(true);
+        this.showOcrPreview(source);
+        this.stopOcrCamera();
+        this.setOcrStatus("辨識中，請稍候");
+        this.showLoading("辨識中");
+
+        try {
+
+            const image = await this.prepareOcrImage(source);
+
+            const result = await Tesseract.recognize(
+                image,
+                "eng",
+                {
+                    logger: progress => this.updateOcrProgress(progress)
+                }
+            );
+
+            const values = this.extractBloodPressureValues(
+                result && result.data ? result.data.text : ""
+            );
+
+            if (!values) {
+
+                this.setOcrStatus("沒有辨識到完整數字，請重拍或手動輸入");
+                this.showToast("請重拍或手動輸入");
+
+                return;
+
+            }
+
+            this.applyOcrValues(values);
+
+        }
+
+        catch (err) {
+
+            console.error("[OCR]", err);
+            this.setOcrStatus("辨識失敗，請重拍或手動輸入");
+            this.showToast("辨識失敗");
+
+        }
+
+        finally {
+
+            this.ocr.recognizing = false;
+            this.setOcrBusy(false);
+            this.hideLoading();
+
+        }
+
+    },
+
+    showOcrPreview(source) {
+
+        if (!this.elements.ocrPreview || !this.elements.ocrPreviewWrap) return;
+
+        if (this.ocr.objectUrl) {
+
+            URL.revokeObjectURL(this.ocr.objectUrl);
+
+        }
+
+        if (source instanceof HTMLCanvasElement) {
+
+            this.elements.ocrPreview.src = source.toDataURL("image/jpeg", .9);
+
+        } else {
+
+            this.ocr.objectUrl = URL.createObjectURL(source);
+            this.elements.ocrPreview.src = this.ocr.objectUrl;
+
+        }
+
+        this.elements.ocrPreviewWrap.hidden = false;
+
+    },
+
+    clearOcrImage() {
+
+        this.stopOcrCamera();
+
+        if (this.elements.ocrPreview) {
+
+            this.elements.ocrPreview.removeAttribute("src");
+
+        }
+
+        if (this.elements.ocrPreviewWrap) {
+
+            this.elements.ocrPreviewWrap.hidden = true;
+
+        }
+
+        if (this.ocr.objectUrl) {
+
+            URL.revokeObjectURL(this.ocr.objectUrl);
+            this.ocr.objectUrl = "";
+
+        }
+
+        this.setOcrStatus("");
+
+    },
+
+    setOcrStatus(message) {
+
+        if (this.elements.ocrStatus) {
+
+            this.elements.ocrStatus.textContent = message;
+
+        }
+
+    },
+
+    setOcrBusy(busy) {
+
+        if (this.elements.ocrCaptureBtn) {
+
+            this.elements.ocrCaptureBtn.disabled = Boolean(busy);
+
+        }
+
+        if (this.elements.ocrShutterBtn) {
+
+            this.elements.ocrShutterBtn.disabled = Boolean(busy);
+
+        }
+
+    },
+
+    updateOcrProgress(progress) {
+
+        if (!progress || progress.status !== "recognizing text") return;
+
+        const percent = Math.round((progress.progress || 0) * 100);
+
+        this.setOcrStatus(`辨識中 ${percent}%`);
+
+    },
+
+    async prepareOcrImage(source) {
+
+        const bitmap =
+            source instanceof HTMLCanvasElement
+                ? source
+                : await this.loadOcrBitmap(source);
+        const maxSide = 1600;
+        const scale = Math.min(
+            1,
+            maxSide / Math.max(bitmap.width, bitmap.height)
+        );
+        const canvas = document.createElement("canvas");
+
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const data = imageData.data;
+
+        for (let i = 0; i < data.length; i += 4) {
+
+            const gray =
+                data[i] * 0.299 +
+                data[i + 1] * 0.587 +
+                data[i + 2] * 0.114;
+
+            const contrast = gray > 128 ? 255 : 0;
+
+            data[i] = contrast;
+            data[i + 1] = contrast;
+            data[i + 2] = contrast;
+
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+
+        return canvas;
+
+    },
+
+    async loadOcrBitmap(file) {
+
+        if (typeof createImageBitmap === "function") {
+
+            return await createImageBitmap(file);
+
+        }
+
+        return await new Promise((resolve, reject) => {
+
+            const image = new Image();
+            const url = URL.createObjectURL(file);
+
+            image.onload = () => {
+
+                URL.revokeObjectURL(url);
+                resolve(image);
+
+            };
+
+            image.onerror = () => {
+
+                URL.revokeObjectURL(url);
+                reject(new Error("Image load failed"));
+
+            };
+
+            image.src = url;
+
+        });
+
+    },
+
+    extractBloodPressureValues(text) {
+
+        const normalized = String(text || "")
+            .toUpperCase()
+            .replace(/[|]/g, "I")
+            .replace(/[^\dA-Z\u4E00-\u9FFF/\n\r :.-]+/g, " ");
+
+        const numbers = (normalized.match(/\b\d{2,3}\b/g) || [])
+            .map(value => Number(value))
+            .filter(value => value >= 30 && value <= 280);
+
+        const readings = this.findOcrLabeledReadings(normalized);
+        const sysReadings = readings
+            .filter(reading => reading.type === "sys")
+            .map(reading => reading.value);
+        const diaReadings = readings
+            .filter(reading => reading.type === "dia")
+            .map(reading => reading.value);
+        const pulseReadings = readings
+            .filter(reading => reading.type === "pulse")
+            .map(reading => reading.value);
+
+        const sys = sysReadings.find(value => value >= 50 && value <= 280) ||
+            numbers.find(value => value >= 50 && value <= 280);
+
+        const dia = diaReadings.find(value => (
+            value >= 30 &&
+            value <= 180 &&
+            value < sys
+        )) || sysReadings.find(value => (
+            value >= 30 &&
+            value <= 180 &&
+            value < sys
+        )) || numbers.find(value => value >= 30 && value <= 180 && value < sys);
+
+        const pulse = pulseReadings.find(value => (
+            value >= 30 &&
+            value <= 220
+        )) || numbers.find(value => (
+            value >= 30 &&
+            value <= 220 &&
+            value !== sys &&
+            value !== dia
+        ));
+
+        if (!this.isOcrBloodPressureValid(sys, dia, pulse)) {
+
+            return null;
+
+        }
+
+        return {
+            sys,
+            dia,
+            pulse
+        };
+
+    },
+
+    findOcrLabeledReadings(text) {
+
+        const patterns = {
+            sys: /\b(SYS|SYSTOLIC|SIS)\b|最高\s*血[壓压]|收縮\s*[壓压]|收缩\s*[壓压]|高\s*[壓压]/,
+            dia: /\b(DIA|DIASTOLIC)\b|最低\s*血[壓压]|舒張\s*[壓压]|舒张\s*[壓压]|低\s*[壓压]/,
+            pulse: /\b(PUL|PULSE|PR|BPM)\b|脈拍|脉拍|脈搏|脉搏|心跳|心率/
+        };
+        const lines = String(text || "")
+            .split(/\n+/)
+            .map(line => line.trim())
+            .filter(Boolean);
+        const readings = [];
+
+        lines.forEach((line, index) => {
+
+            const lineHasNumber = /\b\d{2,3}\b/.test(line);
+            const labelText = [
+                line,
+                lines[index + 1] || ""
+            ].join(" ");
+            const valueText = [
+                line,
+                lines[index + 1] || "",
+                lines[index + 2] || "",
+                lines[index + 3] || ""
+            ].join(" ");
+
+            Object.keys(patterns).forEach(type => {
+
+                const hasCurrentLabel = patterns[type].test(line);
+                const hasSplitLabel =
+                    !lineHasNumber &&
+                    patterns[type].test(labelText);
+
+                if (!hasCurrentLabel && !hasSplitLabel) return;
+
+                const match = valueText.match(/\b\d{2,3}\b/);
+
+                if (!match) return;
+
+                const value = Number(match[0]);
+
+                if (readings.some(reading => (
+                    reading.type === type &&
+                    reading.value === value &&
+                    Math.abs(reading.index - index) <= 1
+                ))) {
+
+                    return;
+
+                }
+
+                readings.push({
+                    type,
+                    value,
+                    index
+                });
+
+            });
+
+        });
+
+        return readings;
+
+    },
+
+    findOcrLabeledValue(text, labelPattern) {
+
+        const lines = String(text || "").split(/\n+/);
+
+        for (let index = 0; index < lines.length; index += 1) {
+
+            const line = lines[index];
+
+            if (!labelPattern.test(line)) continue;
+
+            const nearbyText = [
+                line,
+                lines[index + 1] || ""
+            ].join(" ");
+
+            const match = nearbyText.match(/\b\d{2,3}\b/);
+
+            if (match) {
+
+                return Number(match[0]);
+
+            }
+
+        }
+
+        return null;
+
+    },
+
+    isOcrBloodPressureValid(sys, dia, pulse) {
+
+        return (
+            Number.isFinite(sys) &&
+            Number.isFinite(dia) &&
+            Number.isFinite(pulse) &&
+            sys >= 50 &&
+            sys <= 280 &&
+            dia >= 30 &&
+            dia <= 180 &&
+            pulse >= 30 &&
+            pulse <= 220 &&
+            dia < sys
+        );
+
+    },
+
+    applyOcrValues(values) {
+
+        this.elements.sys.value = String(values.sys);
+        this.elements.dia.value = String(values.dia);
+        this.elements.pulse.value = String(values.pulse);
+
+        this.clearErrors();
+        this.setOcrStatus(
+            `已填入 ${values.sys} / ${values.dia}，脈搏 ${values.pulse}`
+        );
+        this.showToast("已填入辨識結果");
+
+        if (this.elements.saveBtn) {
+
+            this.elements.saveBtn.focus();
+
+        }
 
     },
 
@@ -496,20 +1148,20 @@ const App = {
 
         }
 
-        if (this.elements.settingsUserName) {
-
-            this.elements.settingsUserName.value = this.getUserName();
-
-        }
-
     },
 
     async loadUserOptions(showToast = false) {
 
-        if (
-            !this.elements.settingsUserOptions ||
-            typeof getUsers !== "function"
-        ) {
+        if (!this.elements.settingsUserOptions) {
+
+            return;
+
+        }
+
+        this.state.userOptions = this.getMergedUserOptions();
+        this.renderUserOptions();
+
+        if (typeof getUsers !== "function") {
 
             return;
 
@@ -529,7 +1181,7 @@ const App = {
 
         }
 
-        this.state.userOptions = result.data || [];
+        this.state.userOptions = this.getMergedUserOptions(result.data || []);
         this.renderUserOptions();
 
         if (showToast) {
@@ -552,26 +1204,156 @@ const App = {
 
         list.textContent = "";
 
+        const currentUser = this.getUserName();
+
         this.state.userOptions.forEach(name => {
 
-            const option = document.createElement("option");
+            const option = document.createElement("button");
 
-            option.value = name;
+            option.type = "button";
+
+            option.className = "settings-user-option";
+
+            option.textContent = name;
+
+            option.setAttribute("role", "option");
+
+            option.setAttribute(
+                "aria-selected",
+                name === currentUser ? "true" : "false"
+            );
+
+            option.classList.toggle("active", name === currentUser);
+
+            option.addEventListener("click", () => {
+
+                this.selectUserOption(name);
+
+            });
 
             list.appendChild(option);
 
         });
 
+        if (this.elements.settingsAddUserBtn) {
+
+            list.appendChild(this.elements.settingsAddUserBtn);
+
+        }
+
+    },
+
+    getLocalUserOptions() {
+
+        try {
+
+            const raw = JSON.parse(
+                localStorage.getItem(this.localUserOptionsKey) || "[]"
+            );
+
+            return Array.isArray(raw)
+                ? raw.map(name => this.normalizeUserName(name))
+                : [];
+
+        }
+
+        catch (err) {
+
+            console.error("[Settings] local users parse failed", err);
+
+            return [];
+
+        }
+
+    },
+
+    saveLocalUserOption(name) {
+
+        const normalized = this.normalizeUserName(name);
+        const options = this.getMergedUserOptions([
+            ...this.getLocalUserOptions(),
+            normalized
+        ]);
+
+        localStorage.setItem(
+            this.localUserOptionsKey,
+            JSON.stringify(options)
+        );
+
+        this.state.userOptions = this.getMergedUserOptions(this.state.userOptions);
+        this.renderUserOptions();
+
+    },
+
+    getMergedUserOptions(options = []) {
+
+        const names = [
+            this.getUserName(),
+            ...this.getLocalUserOptions(),
+            ...options
+        ];
+        const seen = new Set();
+
+        return names
+            .map(name => this.normalizeUserName(name))
+            .filter(name => {
+
+                if (!name || seen.has(name)) {
+
+                    return false;
+
+                }
+
+                seen.add(name);
+
+                return true;
+
+            });
+
+    },
+
+    selectUserOption(name) {
+
+        const userName = this.normalizeUserName(name);
+
+        localStorage.setItem("bp-user", userName);
+
+        this.renderUserOptions();
+        this.renderGreeting();
+
+    },
+
+    promptAddUser() {
+
+        const input = window.prompt("請輸入新增使用者姓名");
+
+        if (input === null) {
+
+            return;
+
+        }
+
+        const userName = this.normalizeUserName(input);
+
+        if (!String(input || "").trim()) {
+
+            this.showToast("請輸入姓名");
+
+            return;
+
+        }
+
+        localStorage.setItem("bp-user", userName);
+        this.saveLocalUserOption(userName);
+        this.renderGreeting();
+        this.showToast("已新增使用者");
+
     },
 
     async saveSettings() {
 
-        const nameInput = this.elements.settingsUserName;
         const apiInput = this.elements.settingsApiUrl;
-
-        const userName = this.normalizeUserName(
-            nameInput ? nameInput.value : ""
-        );
+        const userName = this.getUserName();
 
         const userId = this.getUserProfile().id || this.createUserId();
 
@@ -585,11 +1367,8 @@ const App = {
         localStorage.setItem("bp-user", userName);
         localStorage.setItem("bp-user-id", userId);
 
-        if (nameInput) {
-
-            nameInput.value = userName;
-
-        }
+        this.saveLocalUserOption(userName);
+        this.renderUserOptions();
 
         await this.refreshToday();
 
@@ -1049,9 +1828,9 @@ const App = {
 
         this.elements.saveBtn.disabled = true;
 
-        const previousButtonText = this.elements.saveBtn.textContent;
+        const previousButtonText = this.getSaveButtonLabel();
 
-        this.elements.saveBtn.textContent = "儲存中";
+        this.setSaveButtonLabel("儲存中");
 
         this.showLoading();
 
@@ -1139,9 +1918,9 @@ const App = {
 
             this.elements.saveBtn.disabled = false;
 
-            if (this.elements.saveBtn.textContent === "儲存中") {
+            if (this.getSaveButtonLabel() === "儲存中") {
 
-                this.elements.saveBtn.textContent = previousButtonText;
+                this.setSaveButtonLabel(previousButtonText);
 
             }
 
@@ -1193,7 +1972,7 @@ const App = {
 
     saveFailed() {
 
-        this.elements.saveBtn.textContent = "儲存紀錄";
+        this.setSaveButtonLabel("儲存紀錄");
 
         this.showToast("儲存失敗，請再按一次");
 
@@ -1216,7 +1995,7 @@ const App = {
         this.state.editingId = null;
     
         // 恢復按鈕文字
-        this.elements.saveBtn.textContent = "儲存紀錄";
+        this.setSaveButtonLabel("儲存紀錄");
     
         this.resetIHB();
     
@@ -1318,11 +2097,17 @@ const App = {
         this.elements.todayStatus.className =
             `today-status ${status.className}`;
 
+        this.elements.todayCard.classList.toggle(
+            "is-caution-reading",
+            status.className === "is-caution" || status.className === "is-high"
+        );
+
     },
 
     renderTodayEmpty() {
 
         this.elements.todayCard.classList.add("is-empty");
+        this.elements.todayCard.classList.remove("is-caution-reading");
 
         this.renderGreeting();
 

@@ -43,7 +43,7 @@
 
     <link
         rel="stylesheet"
-        href="css/style.css?v=20260707-17">
+        href="css/style.css?v=20260710-user-prompt">
 
 </head>
 
@@ -338,18 +338,101 @@
 
             </article>
 
-            <!-- ===================== -->
-            <!-- 儲存 -->
-            <!-- ===================== -->
+            <section
+                class="ocr-card"
+                aria-label="紀錄操作">
 
-            <button
-                id="saveBtn"
-                class="save-btn"
-                type="button">
+                <div class="home-action-row">
 
-                儲存紀錄
+                    <button
+                        id="ocrCaptureBtn"
+                        class="home-action-btn ocr-capture-btn"
+                        type="button"
+                        aria-label="拍照辨識">
 
-            </button>
+                        <svg class="ocr-capture-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7.5 8.2 5h7.6l1.7 2.5H20a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2h2.5Z"/><circle cx="12" cy="13.5" r="4"/></svg><span class="sr-only">拍照辨識</span>
+
+                    </button>
+
+                    <button
+                        id="saveBtn"
+                        class="home-action-btn save-btn"
+                        type="button"
+                        aria-label="儲存紀錄">
+
+                        <svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5Z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/></svg><span class="sr-only">儲存紀錄</span>
+
+                    </button>
+
+                </div>
+
+                <div class="ocr-card-main">
+
+                    <div
+                        id="ocrStatus"
+                        class="ocr-status"
+                        aria-live="polite"></div>
+
+                </div>
+
+                <div
+                    id="ocrCameraPanel"
+                    class="ocr-camera-panel"
+                    hidden>
+
+                    <video
+                        id="ocrCameraVideo"
+                        class="ocr-camera-video"
+                        autoplay
+                        playsinline
+                        muted></video>
+
+                    <div class="ocr-camera-actions">
+
+                        <button
+                            id="ocrShutterBtn"
+                            class="ocr-shutter-btn"
+                            type="button">
+
+                            拍下辨識
+
+                        </button>
+
+                        <button
+                            id="ocrCancelBtn"
+                            class="ocr-clear-btn"
+                            type="button">
+
+                            取消
+
+                        </button>
+
+                    </div>
+
+                </div>
+
+                <div
+                    id="ocrPreviewWrap"
+                    class="ocr-preview-wrap"
+                    hidden>
+
+                    <img
+                        id="ocrPreview"
+                        class="ocr-preview"
+                        alt="血壓計照片預覽">
+
+                    <button
+                        id="ocrClearBtn"
+                        class="ocr-clear-btn"
+                        type="button">
+
+                        清除照片
+
+                    </button>
+
+                </div>
+
+            </section>
 
         </section>
 
@@ -561,6 +644,32 @@
                     </div>
 
                 </section>
+
+            </section>
+
+            <section
+                class="history-export"
+                aria-label="CSV 匯出">
+
+                <div
+                    id="historyExportSummary"
+                    class="history-export-summary"
+                    aria-live="polite">
+
+                    目前可匯出 0 筆
+
+                </div>
+
+                <button
+                    id="historyExportBtn"
+                    class="history-export-btn"
+                    type="button"
+                    disabled
+                    aria-label="匯出 CSV">
+
+                    <svg class="history-export-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></svg><span class="sr-only">匯出 CSV</span>
+
+                </button>
 
             </section>
 
@@ -982,7 +1091,7 @@
 
                 <div class="settings-card-subtitle">
 
-                    可設定 GitHub 掛網頁使用的 Apps Script 網址，並選擇或手動輸入目前使用者姓名。
+                    可設定 GitHub 掛網頁使用的 Apps Script 網址，並點選或新增目前使用者姓名。
 
                 </div>
 
@@ -1014,28 +1123,26 @@
 
                         </span>
 
-                        <input
-                            id="settingsUserName"
-                            class="settings-input"
-                            type="text"
-                            list="settingsUserOptions"
-                            autocomplete="off"
-                            placeholder="可手動輸入或從名單選擇">
+                        <div
+                            id="settingsUserOptions"
+                            class="settings-user-options"
+                            role="listbox"
+                            aria-label="使用者姓名選項">
 
-                        <datalist id="settingsUserOptions"></datalist>
+                            <button
+                                id="settingsAddUserBtn"
+                                class="settings-add-user-btn"
+                                type="button">
+
+                                <span aria-hidden="true">＋</span><span>新增</span>
+
+                            </button>
+
+                        </div>
 
                     </label>
 
                     <div class="settings-actions">
-
-                        <button
-                            id="settingsReloadUsers"
-                            class="settings-secondary-btn"
-                            type="button">
-
-                            重新載入姓名
-
-                        </button>
 
                         <button
                             id="settingsSaveBtn"
@@ -1152,7 +1259,7 @@
 
                 <div class="settings-note">
 
-                    以較高的 SYS 或 DIA 為主進行判定；若任一數值進入較高區間，會顯示對應燈號。
+                    以較高的 SYS 或 DIA 為主進行判定；若任一數值進入較高區間，會顯示對應燈號。符合 <span class="settings-note-danger">一期</span> 或 <span class="settings-note-danger">二期</span> 時，該筆資料卡片內數字會以 <span class="settings-note-danger">紅字</span> 呈現。
 
                 </div>
 
@@ -1299,10 +1406,11 @@
     </nav>
 
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="js/api.js?v=20260707-17"></script>
-    <script src="js/history.js?v=20260707-17"></script>
-    <script src="js/chart.js?v=20260707-17"></script>
-    <script src="js/app.js?v=20260707-17"></script>    
+    <script src="js/history.js?v=20260710-caution-red"></script>
+    <script src="js/chart.js?v=20260710-caution-red"></script>
+    <script src="js/app.js?v=20260710-user-prompt"></script>    
 
 </body>
 </html>
