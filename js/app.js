@@ -3013,20 +3013,39 @@ const App = {
         }
 
         const threshold = this.estimateDarkPixelThreshold(histogram, gray.length);
-        const groups = this.findDigitRowGroups(
+        let groups = this.findDigitRowGroups(
             gray,
             threshold,
             sampleWidth,
             sampleHeight
         );
+        let usedComponents = false;
 
         if (groups.length < 3) {
 
-            return null;
+            groups = this.findDigitGroupsByComponents(
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight
+            );
+            usedComponents = true;
 
         }
 
-        const selected = this.selectBestDigitFieldTriplet(groups);
+        let selected = this.selectBestDigitFieldTriplet(groups);
+
+        if (!selected && !usedComponents) {
+
+            groups = this.findDigitGroupsByComponents(
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight
+            );
+            selected = this.selectBestDigitFieldTriplet(groups);
+
+        }
 
         if (!selected) {
 
@@ -3785,6 +3804,232 @@ const App = {
                 group.rect.height >= .035 &&
                 group.rect.height <= .26
             ));
+
+    },
+
+    findDigitGroupsByComponents(gray, threshold, width, height) {
+
+        const mask = new Uint8Array(gray.length);
+
+        for (let i = 0; i < gray.length; i += 1) {
+
+            mask[i] = gray[i] <= threshold ? 1 : 0;
+
+        }
+
+        const components = this.findDarkComponents(mask, width, height)
+            .filter(component => this.isLikelySevenSegmentComponent(
+                component,
+                width,
+                height
+            ));
+        const rows = this.clusterDigitComponentsIntoRows(
+            components,
+            width,
+            height
+        );
+
+        return rows
+            .map(row => this.createDigitFieldFromComponents(row, width, height))
+            .filter(Boolean)
+            .filter(group => (
+                group.rect.width >= .07 &&
+                group.rect.width <= .58 &&
+                group.rect.height >= .035 &&
+                group.rect.height <= .22
+            ));
+
+    },
+
+    findDarkComponents(mask, width, height) {
+
+        const visited = new Uint8Array(mask.length);
+        const components = [];
+        const queue = [];
+
+        for (let i = 0; i < mask.length; i += 1) {
+
+            if (!mask[i] || visited[i]) continue;
+
+            let minX = width;
+            let minY = height;
+            let maxX = 0;
+            let maxY = 0;
+            let area = 0;
+
+            queue.length = 0;
+            queue.push(i);
+            visited[i] = 1;
+
+            for (let q = 0; q < queue.length; q += 1) {
+
+                const current = queue[q];
+                const x = current % width;
+                const y = Math.floor(current / width);
+
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+                area += 1;
+
+                const neighbors = [
+                    current - 1,
+                    current + 1,
+                    current - width,
+                    current + width
+                ];
+
+                neighbors.forEach(next => {
+
+                    if (
+                        next < 0 ||
+                        next >= mask.length ||
+                        visited[next] ||
+                        !mask[next]
+                    ) return;
+
+                    const nx = next % width;
+
+                    if (Math.abs(nx - x) > 1) return;
+
+                    visited[next] = 1;
+                    queue.push(next);
+
+                });
+
+            }
+
+            components.push({
+                x: minX,
+                y: minY,
+                width: maxX - minX + 1,
+                height: maxY - minY + 1,
+                area,
+                centerX: (minX + maxX) / 2,
+                centerY: (minY + maxY) / 2
+            });
+
+        }
+
+        return components;
+
+    },
+
+    isLikelySevenSegmentComponent(component, width, height) {
+
+        const areaRatio = component.area / Math.max(1, width * height);
+        const componentWidthRatio = component.width / width;
+        const componentHeightRatio = component.height / height;
+        const fillRatio = component.area / Math.max(1, component.width * component.height);
+        const aspect = component.width / Math.max(1, component.height);
+
+        return (
+            areaRatio >= .000035 &&
+            areaRatio <= .018 &&
+            componentWidthRatio >= .006 &&
+            componentWidthRatio <= .18 &&
+            componentHeightRatio >= .010 &&
+            componentHeightRatio <= .18 &&
+            fillRatio >= .10 &&
+            aspect >= .08 &&
+            aspect <= 12
+        );
+
+    },
+
+    clusterDigitComponentsIntoRows(components, width, height) {
+
+        const rows = [];
+        const sorted = [...components].sort((a, b) => a.centerY - b.centerY);
+        const rowGap = Math.max(8, height * .055);
+
+        sorted.forEach(component => {
+
+            let row = rows.find(item =>
+                Math.abs(item.centerY - component.centerY) <= rowGap ||
+                this.componentOverlapsRow(component, item)
+            );
+
+            if (!row) {
+
+                row = {
+                    components: [],
+                    centerY: component.centerY,
+                    minY: component.y,
+                    maxY: component.y + component.height
+                };
+                rows.push(row);
+
+            }
+
+            row.components.push(component);
+            row.centerY =
+                row.components.reduce((sum, item) => sum + item.centerY, 0) /
+                row.components.length;
+            row.minY = Math.min(row.minY, component.y);
+            row.maxY = Math.max(row.maxY, component.y + component.height);
+
+        });
+
+        return rows
+            .map(row => ({
+                ...row,
+                components: row.components.sort((a, b) => a.x - b.x)
+            }))
+            .filter(row => row.components.length >= 3);
+
+    },
+
+    componentOverlapsRow(component, row) {
+
+        const top = component.y;
+        const bottom = component.y + component.height;
+
+        return bottom >= row.minY && top <= row.maxY;
+
+    },
+
+    createDigitFieldFromComponents(row, width, height) {
+
+        if (!row || !row.components.length) return null;
+
+        const minX = Math.min(...row.components.map(component => component.x));
+        const minY = Math.min(...row.components.map(component => component.y));
+        const maxX = Math.max(...row.components.map(
+            component => component.x + component.width
+        ));
+        const maxY = Math.max(...row.components.map(
+            component => component.y + component.height
+        ));
+        const totalArea = row.components.reduce(
+            (sum, component) => sum + component.area,
+            0
+        );
+        const padX = Math.round(width * .025);
+        const padY = Math.round(height * .020);
+        const left = Math.max(0, minX - padX);
+        const top = Math.max(0, minY - padY);
+        const right = Math.min(width - 1, maxX + padX);
+        const bottom = Math.min(height - 1, maxY + padY);
+        const rectWidth = right - left + 1;
+        const rectHeight = bottom - top + 1;
+        const centerX = (left + right) / 2 / width;
+        const score =
+            totalArea / Math.max(1, width * height) * 1000 +
+            row.components.length * .18 +
+            this.scoreSoftRange(centerX, .18, .90, .34, .76) * 2;
+
+        return {
+            score,
+            rect: {
+                x: left / width,
+                y: top / height,
+                width: rectWidth / width,
+                height: rectHeight / height
+            },
+            components: row.components.length
+        };
 
     },
 
