@@ -2547,6 +2547,19 @@ const App = {
 
             }
 
+            const slotValues = this.recognizeKnownLayoutSevenSegmentFields(
+                canvas,
+                candidate.fields,
+                debug,
+                candidate.label
+            );
+
+            if (slotValues) {
+
+                return slotValues;
+
+            }
+
             const segmentValues = this.recognizeSevenSegmentFields(
                 canvas,
                 candidate.fields,
@@ -2583,28 +2596,161 @@ const App = {
             {
                 label: "Tensoval 右側大字 fallback A",
                 fields: {
-                    sys: { x: .405, y: .292, width: .292, height: .100 },
-                    dia: { x: .440, y: .402, width: .252, height: .100 },
-                    pulse: { x: .475, y: .522, width: .220, height: .092 }
+                    sys: { x: .405, y: .315, width: .292, height: .086 },
+                    dia: { x: .440, y: .420, width: .252, height: .088 },
+                    pulse: { x: .475, y: .535, width: .220, height: .082 }
                 }
             },
             {
                 label: "Tensoval 右側大字 fallback B",
                 fields: {
-                    sys: { x: .385, y: .278, width: .320, height: .118 },
-                    dia: { x: .420, y: .388, width: .292, height: .118 },
-                    pulse: { x: .455, y: .508, width: .260, height: .108 }
+                    sys: { x: .385, y: .305, width: .320, height: .100 },
+                    dia: { x: .420, y: .410, width: .292, height: .100 },
+                    pulse: { x: .455, y: .525, width: .260, height: .092 }
                 }
             },
             {
                 label: "Tensoval 右側大字 fallback C",
                 fields: {
-                    sys: { x: .410, y: .305, width: .285, height: .095 },
-                    dia: { x: .445, y: .415, width: .250, height: .095 },
-                    pulse: { x: .480, y: .532, width: .215, height: .090 }
+                    sys: { x: .418, y: .325, width: .270, height: .080 },
+                    dia: { x: .452, y: .430, width: .238, height: .082 },
+                    pulse: { x: .485, y: .542, width: .205, height: .078 }
                 }
             }
         ];
+
+    },
+
+    recognizeKnownLayoutSevenSegmentFields(canvas, fields, debug = null, label = "") {
+
+        const values = {
+            sys: this.recognizeSevenSegmentFieldBySlots(
+                canvas,
+                fields.sys,
+                [50, 280],
+                [3, 2],
+                debug,
+                `${label} SYS slots`
+            ),
+            dia: this.recognizeSevenSegmentFieldBySlots(
+                canvas,
+                fields.dia,
+                [30, 180],
+                [2, 3],
+                debug,
+                `${label} DIA slots`
+            ),
+            pulse: this.recognizeSevenSegmentFieldBySlots(
+                canvas,
+                fields.pulse,
+                [30, 220],
+                [2, 3],
+                debug,
+                `${label} Pulse slots`
+            )
+        };
+
+        if (
+            !Number.isFinite(values.sys) ||
+            !Number.isFinite(values.dia) ||
+            !Number.isFinite(values.pulse)
+        ) {
+
+            return null;
+
+        }
+
+        return this.isOcrBloodPressureValid(
+            values.sys,
+            values.dia,
+            values.pulse
+        )
+            ? values
+            : null;
+
+    },
+
+    recognizeSevenSegmentFieldBySlots(
+        canvas,
+        rect,
+        range,
+        digitCounts,
+        debug = null,
+        label = ""
+    ) {
+
+        const digitCanvas = this.createSevenSegmentCanvas(canvas, rect);
+        const binary = this.createSevenSegmentBinary(digitCanvas);
+
+        for (const count of digitCounts) {
+
+            const digitRects = this.createSevenSegmentSlotRects(
+                binary.width,
+                binary.height,
+                count
+            );
+            const digits = digitRects.map(digitRect =>
+                this.classifySevenSegmentDigit(
+                    binary.mask,
+                    binary.width,
+                    binary.height,
+                    digitRect
+                )
+            );
+
+            if (debug) {
+
+                this.captureSevenSegmentDebug(
+                    debug,
+                    digitCanvas,
+                    binary,
+                    digitRects,
+                    digits,
+                    `${label} ${count}格`
+                );
+
+            }
+
+            if (digits.some(item => !item || item.confidence < .50)) {
+
+                continue;
+
+            }
+
+            const value = Number(digits.map(item => item.value).join(""));
+
+            if (
+                Number.isFinite(value) &&
+                value >= range[0] &&
+                value <= range[1]
+            ) {
+
+                return value;
+
+            }
+
+        }
+
+        return null;
+
+    },
+
+    createSevenSegmentSlotRects(width, height, count) {
+
+        const leftMargin = width * .03;
+        const rightMargin = width * .03;
+        const gap = width * .035;
+        const available = width - leftMargin - rightMargin - gap * (count - 1);
+        const slotWidth = available / count;
+        const top = height * .04;
+        const slotHeight = height * .92;
+
+        return Array.from({ length: count }, (_, index) => ({
+            x: leftMargin + index * (slotWidth + gap),
+            y: top,
+            width: slotWidth,
+            height: slotHeight
+        }));
 
     },
 
@@ -3823,7 +3969,7 @@ const App = {
                 height,
                 rect,
                 regions[key]
-            ) >= .16;
+            ) >= .11;
 
         });
 
