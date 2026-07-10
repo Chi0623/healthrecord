@@ -57,6 +57,8 @@ const App = {
 
         templateLcdConfirmPending: false,
 
+        templateAutoFields: null,
+
         templateDebug: false,
 
         templateDragging: false,
@@ -916,6 +918,7 @@ const App = {
         this.ocr.templateLcdCandidates = [];
         this.ocr.templateLcdDetection = null;
         this.ocr.templateLcdConfirmPending = false;
+        this.ocr.templateAutoFields = null;
         this.ocr.templateDragHandle = null;
         this.setOcrTemplatePrimaryLabel("拍下");
         this.updateOcrTemplateHint();
@@ -1041,6 +1044,7 @@ const App = {
             this.ocr.templateLcdCandidates = [];
             this.ocr.templateLcdDetection = null;
             this.ocr.templateLcdConfirmPending = false;
+            this.ocr.templateAutoFields = null;
             this.ocr.templateDragHandle = null;
             this.stopOcrTemplateCamera();
             video.hidden = true;
@@ -1376,9 +1380,267 @@ const App = {
 
         }
 
+        const fields = this.detectOcrTemplateNumberFields(rect);
+
+        this.ocr.templateRects = {
+            lcd: rect,
+            sys: this.convertRectFromBase(fields.sys, rect),
+            dia: this.convertRectFromBase(fields.dia, rect),
+            pulse: this.convertRectFromBase(fields.pulse, rect)
+        };
+        this.ocr.templateAutoFields = fields;
         this.ocr.templateLcdConfirmPending = false;
         this.setOcrTemplatePrimaryLabel("拍下");
-        await this.advanceOcrTemplateStep();
+        this.syncOcrTemplateSteps();
+        this.drawOcrTemplateCanvas();
+        this.updateOcrTemplateHint();
+
+        const template = this.createOcrTemplateV2(this.ocr.templateRects);
+
+        await this.saveCurrentOcrTemplate(template);
+        await this.testOcrTemplate(template);
+        this.cancelOcrTemplateSetup();
+
+    },
+
+    detectOcrTemplateNumberFields(lcdRect) {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!canvas || !this.ocr.templateImage) {
+
+            return this.getDefaultOcrTemplateFields();
+
+        }
+
+        const crop = this.rectToPixelCrop(lcdRect, canvas.width, canvas.height);
+        const sampleWidth = 420;
+        const sampleHeight = Math.max(
+            160,
+            Math.round(crop.height * sampleWidth / Math.max(1, crop.width))
+        );
+        const sampleCanvas = document.createElement("canvas");
+        sampleCanvas.width = sampleWidth;
+        sampleCanvas.height = sampleHeight;
+
+        const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(
+            this.ocr.templateImage,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            sampleWidth,
+            sampleHeight
+        );
+
+        const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = imageData.data;
+        const gray = new Uint8Array(sampleWidth * sampleHeight);
+        let total = 0;
+
+        for (let i = 0; i < gray.length; i += 1) {
+
+            const offset = i * 4;
+            const value = Math.round(
+                data[offset] * .299 +
+                data[offset + 1] * .587 +
+                data[offset + 2] * .114
+            );
+
+            gray[i] = value;
+            total += value;
+
+        }
+
+        const mean = total / gray.length;
+        const threshold = Math.max(32, Math.min(145, mean - 18));
+        const startX = Math.round(sampleWidth * .22);
+        const endX = Math.round(sampleWidth * .96);
+        const rowCounts = new Array(sampleHeight).fill(0);
+
+        for (let y = 0; y < sampleHeight; y += 1) {
+
+            let count = 0;
+
+            for (let x = startX; x < endX; x += 1) {
+
+                if (gray[y * sampleWidth + x] <= threshold) {
+
+                    count += 1;
+
+                }
+
+            }
+
+            rowCounts[y] = count;
+
+        }
+
+        const smoothed = rowCounts.map((_, index) => {
+
+            let sum = 0;
+            let size = 0;
+
+            for (
+                let y = Math.max(0, index - 3);
+                y <= Math.min(sampleHeight - 1, index + 3);
+                y += 1
+            ) {
+
+                sum += rowCounts[y];
+                size += 1;
+
+            }
+
+            return sum / size;
+
+        });
+        const maxRow = Math.max(...smoothed);
+        const activeThreshold = Math.max(8, maxRow * .20);
+        const bands = [];
+        let bandStart = null;
+
+        smoothed.forEach((value, y) => {
+
+            if (value >= activeThreshold && bandStart === null) {
+
+                bandStart = y;
+
+            } else if (value < activeThreshold && bandStart !== null) {
+
+                bands.push({
+                    top: bandStart,
+                    bottom: y - 1
+                });
+                bandStart = null;
+
+            }
+
+        });
+
+        if (bandStart !== null) {
+
+            bands.push({
+                top: bandStart,
+                bottom: sampleHeight - 1
+            });
+
+        }
+
+        const fields = bands
+            .map(band => this.createNumberFieldFromBand(
+                band,
+                gray,
+                threshold,
+                sampleWidth,
+                sampleHeight,
+                startX,
+                endX
+            ))
+            .filter(Boolean)
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3)
+            .sort((a, b) => a.rect.y - b.rect.y);
+
+        if (fields.length < 3) {
+
+            return this.getDefaultOcrTemplateFields();
+
+        }
+
+        return {
+            sys: fields[0].rect,
+            dia: fields[1].rect,
+            pulse: fields[2].rect
+        };
+
+    },
+
+    createNumberFieldFromBand(
+        band,
+        gray,
+        threshold,
+        width,
+        height,
+        startX,
+        endX
+    ) {
+
+        const bandHeight = band.bottom - band.top + 1;
+        const heightRatio = bandHeight / height;
+
+        if (heightRatio < .045 || heightRatio > .26) return null;
+
+        let minX = endX;
+        let maxX = startX;
+        let darkCount = 0;
+
+        for (let y = band.top; y <= band.bottom; y += 1) {
+
+            for (let x = startX; x < endX; x += 1) {
+
+                if (gray[y * width + x] <= threshold) {
+
+                    minX = Math.min(minX, x);
+                    maxX = Math.max(maxX, x);
+                    darkCount += 1;
+
+                }
+
+            }
+
+        }
+
+        if (!darkCount || maxX <= minX) return null;
+
+        const padX = Math.round(width * .035);
+        const padY = Math.round(height * .035);
+        const left = Math.max(0, minX - padX);
+        const right = Math.min(width - 1, maxX + padX);
+        const top = Math.max(0, band.top - padY);
+        const bottom = Math.min(height - 1, band.bottom + padY);
+        const rectWidth = right - left + 1;
+        const rectHeight = bottom - top + 1;
+
+        if (rectWidth / width < .12) return null;
+
+        return {
+            score: darkCount * heightRatio * (rectWidth / width),
+            rect: {
+                x: left / width,
+                y: top / height,
+                width: rectWidth / width,
+                height: rectHeight / height
+            }
+        };
+
+    },
+
+    getDefaultOcrTemplateFields() {
+
+        return {
+            sys: {
+                x: .36,
+                y: .10,
+                width: .46,
+                height: .23
+            },
+            dia: {
+                x: .36,
+                y: .36,
+                width: .46,
+                height: .23
+            },
+            pulse: {
+                x: .40,
+                y: .62,
+                width: .38,
+                height: .22
+            }
+        };
 
     },
 
@@ -1826,7 +2088,13 @@ const App = {
 
             step.classList.toggle(
                 "done",
-                Boolean(this.ocr.templateRects[step.dataset.templateStep])
+                step.dataset.templateStep === "auto"
+                    ? Boolean(
+                        this.ocr.templateRects.sys &&
+                        this.ocr.templateRects.dia &&
+                        this.ocr.templateRects.pulse
+                    )
+                    : Boolean(this.ocr.templateRects[step.dataset.templateStep])
             );
 
         });
@@ -1839,9 +2107,7 @@ const App = {
 
         const labels = {
             lcd: "請拍下後確認 LCD 螢幕範圍",
-            sys: "請拖曳框選 SYS 數字",
-            dia: "請拖曳框選 DIA 數字",
-            pulse: "請拖曳框選 Pulse 數字"
+            auto: "正在自動建立數字位置"
         };
 
         if (
