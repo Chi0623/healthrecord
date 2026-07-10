@@ -2447,10 +2447,21 @@ const App = {
 
         const photoCanvas = this.createBitmapCanvas(bitmap, 1200);
 
-        return await this.recognizeBloodPressureFromDigitCanvas(
+        const photoValues = await this.recognizeBloodPressureFromDigitCanvas(
             photoCanvas,
             debug,
             "整張照片"
+        );
+
+        if (photoValues) {
+
+            return photoValues;
+
+        }
+
+        return await this.recognizeBloodPressureFromKnownDeviceLayout(
+            photoCanvas,
+            debug
         );
 
     },
@@ -2483,6 +2494,121 @@ const App = {
             return segmentValues;
 
         }
+
+        const ranges = {
+            sys: [50, 280],
+            dia: [30, 180],
+            pulse: [30, 220]
+        };
+        const values = {};
+
+        for (const key of ["sys", "dia", "pulse"]) {
+
+            const value = await this.recognizeTemplateField(
+                canvas,
+                fields[key],
+                ranges[key]
+            );
+
+            if (!Number.isFinite(value)) {
+
+                return null;
+
+            }
+
+            values[key] = value;
+
+        }
+
+        return this.isOcrBloodPressureValid(
+            values.sys,
+            values.dia,
+            values.pulse
+        )
+            ? values
+            : null;
+
+    },
+
+    async recognizeBloodPressureFromKnownDeviceLayout(canvas, debug = null) {
+
+        const candidates = this.getKnownDeviceDigitLayouts();
+
+        for (const candidate of candidates) {
+
+            if (debug) {
+
+                this.captureDigitFieldDebug(
+                    debug,
+                    canvas,
+                    candidate.fields,
+                    candidate.label
+                );
+
+            }
+
+            const segmentValues = this.recognizeSevenSegmentFields(
+                canvas,
+                candidate.fields,
+                debug,
+                candidate.label
+            );
+
+            if (segmentValues) {
+
+                return segmentValues;
+
+            }
+
+            const tesseractValues = await this.recognizeFieldsWithTesseract(
+                canvas,
+                candidate.fields
+            );
+
+            if (tesseractValues) {
+
+                return tesseractValues;
+
+            }
+
+        }
+
+        return null;
+
+    },
+
+    getKnownDeviceDigitLayouts() {
+
+        return [
+            {
+                label: "Tensoval 右側大字 fallback A",
+                fields: {
+                    sys: { x: .43, y: .245, width: .24, height: .105 },
+                    dia: { x: .46, y: .355, width: .22, height: .105 },
+                    pulse: { x: .49, y: .478, width: .18, height: .090 }
+                }
+            },
+            {
+                label: "Tensoval 右側大字 fallback B",
+                fields: {
+                    sys: { x: .39, y: .225, width: .30, height: .120 },
+                    dia: { x: .43, y: .335, width: .27, height: .120 },
+                    pulse: { x: .46, y: .455, width: .24, height: .105 }
+                }
+            },
+            {
+                label: "Tensoval 右側大字 fallback C",
+                fields: {
+                    sys: { x: .36, y: .205, width: .34, height: .140 },
+                    dia: { x: .40, y: .320, width: .31, height: .135 },
+                    pulse: { x: .43, y: .440, width: .28, height: .120 }
+                }
+            }
+        ];
+
+    },
+
+    async recognizeFieldsWithTesseract(canvas, fields) {
 
         const ranges = {
             sys: [50, 280],
@@ -3604,9 +3730,9 @@ const App = {
             ))
             .filter(Boolean)
             .filter(rect => (
-                rect.width >= width * .055 &&
-                rect.height >= height * .42 &&
-                rect.width <= width * .42
+                rect.width >= width * .035 &&
+                rect.height >= height * .32 &&
+                rect.width <= width * .48
             ));
 
         return rects.slice(0, 3);
