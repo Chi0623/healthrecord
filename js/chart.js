@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC1
+   安心血壓 v1.0 RC3
    chart.js
 ========================================================== */
 
@@ -102,7 +102,7 @@ const ChartPage = {
 
     records: [],
 
-    currentRange: 30,
+    currentRange: "90",
 
     rangeButtons: [],
 
@@ -115,6 +115,14 @@ const ChartPage = {
     statFields: {},
 
     statusSummaryElement: null,
+
+    customFiltersElement: null,
+
+    customToggleButton: null,
+
+    startDateInput: null,
+
+    endDateInput: null,
 
     init() {
 
@@ -140,6 +148,18 @@ const ChartPage = {
             monthPulse: document.getElementById("chartMonthPulse")
         };
 
+        this.rangeAverageLabel =
+            document.getElementById("chartRangeAverageLabel");
+
+        this.customFiltersElement =
+            document.getElementById("chartCustomFilters");
+
+        this.customToggleButton =
+            document.getElementById("chartCustomToggle");
+
+        this.startDateInput = document.getElementById("chartStartDate");
+        this.endDateInput = document.getElementById("chartEndDate");
+
         this.statFields = {
             count: document.getElementById("chartCount"),
             maxSys: document.getElementById("chartMaxSys"),
@@ -163,9 +183,9 @@ const ChartPage = {
 
             button.addEventListener("click", async () => {
 
-                const value = Number(button.dataset.chartRange || 30);
+                const value = button.dataset.chartRange || "90";
 
-                if (!Number.isFinite(value) || value <= 0) {
+                if (!this.isValidRange(value)) {
 
                     return;
 
@@ -174,6 +194,10 @@ const ChartPage = {
                 this.currentRange = value;
 
                 this.syncRangeButtons();
+
+                this.syncCustomFilters();
+
+                this.updateRangeAverageLabel();
 
                 this.render();
 
@@ -191,8 +215,18 @@ const ChartPage = {
 
         });
 
+        [this.startDateInput, this.endDateInput].forEach(input => {
+
+            if (!input) return;
+
+            input.addEventListener("change", () => this.render());
+
+        });
+
         this.syncRangeButtons();
         this.syncPeriodButtons();
+        this.syncCustomFilters();
+        this.updateRangeAverageLabel();
 
     },
 
@@ -200,13 +234,41 @@ const ChartPage = {
 
         this.rangeButtons.forEach(button => {
 
-            const value = Number(button.dataset.chartRange || 0);
-            const active = value === this.currentRange;
+            const value = button.dataset.chartRange || "";
+            const active = value === String(this.currentRange);
 
             button.classList.toggle("active", active);
             button.setAttribute("aria-pressed", active ? "true" : "false");
 
         });
+
+    },
+
+    isValidRange(value) {
+
+        return value === "all" || value === "custom" ||
+            [7, 30, 90, 180, 365].includes(Number(value));
+
+    },
+
+    syncCustomFilters() {
+
+        const custom = this.currentRange === "custom";
+
+        if (this.customFiltersElement) {
+
+            this.customFiltersElement.hidden = !custom;
+
+        }
+
+        if (this.customToggleButton) {
+
+            this.customToggleButton.setAttribute(
+                "aria-expanded",
+                custom ? "true" : "false"
+            );
+
+        }
 
     },
 
@@ -313,7 +375,8 @@ const ChartPage = {
 
         }
 
-        if (this.getRecordsByRange(this.currentRange).length) {
+        if (this.getRecordsByRange(this.currentRange).length ||
+            this.currentRange === "all" || this.currentRange === "custom") {
 
             return;
 
@@ -331,7 +394,7 @@ const ChartPage = {
 
         }
 
-        this.currentRange = nextRange;
+        this.currentRange = String(nextRange);
 
         this.syncRangeButtons();
 
@@ -427,12 +490,54 @@ const ChartPage = {
 
         const periodFilteredRecords = this.getRecordsBySelectedPeriods(this.records);
 
+        if (days === "all") {
+
+            return periodFilteredRecords;
+
+        }
+
+        if (days === "custom") {
+
+            const start = this.parseDateBoundary(
+                this.startDateInput && this.startDateInput.value,
+                false
+            );
+            const end = this.parseDateBoundary(
+                this.endDateInput && this.endDateInput.value,
+                true
+            );
+
+            return periodFilteredRecords.filter(record =>
+                (!start || record.dateObject >= start) &&
+                (!end || record.dateObject <= end)
+            );
+
+        }
+
         const start = new Date();
 
         start.setHours(0, 0, 0, 0);
-        start.setDate(start.getDate() - (days - 1));
+        start.setDate(start.getDate() - (Number(days) - 1));
 
         return periodFilteredRecords.filter(record => record.dateObject >= start);
+
+    },
+
+    parseDateBoundary(value, endOfDay) {
+
+        const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+        if (!match) return null;
+
+        const date = new Date(
+            Number(match[1]),
+            Number(match[2]) - 1,
+            Number(match[3])
+        );
+
+        if (endOfDay) date.setHours(23, 59, 59, 999);
+
+        return date;
 
     },
 
@@ -467,9 +572,9 @@ const ChartPage = {
                 this.isSameWeek(record.dateObject, new Date()),
                 records
             ),
-            month: this.getAverageForPeriod(record =>
-                this.isSameMonth(record.dateObject, new Date()),
-                records
+            month: this.getAverageForPeriod(
+                () => true,
+                this.getRecordsByRange(this.currentRange)
             )
         };
 
@@ -533,6 +638,10 @@ const ChartPage = {
 
     renderSummary(summary) {
 
+        const rangeLabel = this.getRangeAverageLabel();
+
+        this.updateRangeAverageLabel();
+
         this.setMetricField(this.summaryFields.todaySys, summary.today.sys, "今日平均收縮壓");
         this.setMetricField(this.summaryFields.todayDia, summary.today.dia, "今日平均舒張壓");
         this.setMetricField(this.summaryFields.todayPulse, summary.today.pulse, "今日平均脈搏");
@@ -557,9 +666,9 @@ const ChartPage = {
             summary.week.pulse
         );
 
-        this.setMetricField(this.summaryFields.monthSys, summary.month.sys, "本月平均收縮壓");
-        this.setMetricField(this.summaryFields.monthDia, summary.month.dia, "本月平均舒張壓");
-        this.setMetricField(this.summaryFields.monthPulse, summary.month.pulse, "本月平均脈搏");
+        this.setMetricField(this.summaryFields.monthSys, summary.month.sys, `${rangeLabel}收縮壓`);
+        this.setMetricField(this.summaryFields.monthDia, summary.month.dia, `${rangeLabel}舒張壓`);
+        this.setMetricField(this.summaryFields.monthPulse, summary.month.pulse, `${rangeLabel}脈搏`);
         this.markBloodPressureMetricPair(
             this.summaryFields.monthSys,
             this.summaryFields.monthDia,
@@ -568,6 +677,21 @@ const ChartPage = {
             summary.month.dia,
             summary.month.pulse
         );
+
+    },
+
+    getRangeAverageLabel() {
+
+        if (this.currentRange === "all") return "全部平均";
+        if (this.currentRange === "custom") return "自訂平均";
+
+        return `${this.currentRange} 天平均`;
+
+    },
+
+    updateRangeAverageLabel() {
+
+        this.setText(this.rangeAverageLabel, this.getRangeAverageLabel());
 
     },
 

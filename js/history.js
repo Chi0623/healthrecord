@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC1
+   安心血壓 v1.0 RC3
    history.js
 ========================================================== */
 
@@ -63,8 +63,7 @@ const History = {
 
     filters: {
         periods: [],
-        range: "all",
-        statuses: [],
+        range: "90",
         startDate: "",
         endDate: "",
         showAdvanced: false
@@ -124,16 +123,6 @@ const History = {
 
         });
 
-        if (this.advancedToggleButton) {
-
-            this.advancedToggleButton.addEventListener("click", () => {
-
-                this.toggleAdvancedFilters();
-
-            });
-
-        }
-
         if (this.startDateInput) {
 
             this.startDateInput.addEventListener("change", () => {
@@ -182,9 +171,10 @@ const History = {
 
     toggleAdvancedFilters() {
 
-        this.setAdvancedFiltersVisible(
-            !this.filters.showAdvanced
-        );
+        this.filters.range = "custom";
+        this.setAdvancedFiltersVisible(true);
+        this.syncFilterButtons();
+        this.render();
 
     },
 
@@ -260,23 +250,7 @@ const History = {
 
             this.filters.range = value || "all";
 
-        }
-
-        if (type === "status") {
-
-            const statuses = new Set(this.filters.statuses);
-
-            if (statuses.has(value)) {
-
-                statuses.delete(value);
-
-            } else {
-
-                statuses.add(value);
-
-            }
-
-            this.filters.statuses = Array.from(statuses);
+            this.setAdvancedFiltersVisible(value === "custom");
 
         }
 
@@ -307,18 +281,6 @@ const History = {
             if (type === "range") {
 
                 isActive = this.filters.range === value;
-
-            }
-
-            if (type === "status") {
-
-                isActive = this.filters.statuses.includes(value);
-
-            }
-
-            if (button === this.advancedToggleButton) {
-
-                return;
 
             }
 
@@ -415,11 +377,15 @@ const History = {
 
         const selectedPeriods = this.filters.periods;
 
-        const selectedStatuses = this.filters.statuses;
+        const useCustomDates = range === "custom";
 
-        const startDate = this.parseFilterDate(this.filters.startDate, "start");
+        const startDate = useCustomDates
+            ? this.parseFilterDate(this.filters.startDate, "start")
+            : null;
 
-        const endDate = this.parseFilterDate(this.filters.endDate, "end");
+        const endDate = useCustomDates
+            ? this.parseFilterDate(this.filters.endDate, "end")
+            : null;
 
         return this.allRecords.filter(record => {
 
@@ -431,7 +397,8 @@ const History = {
 
             }
 
-            if (range !== "all" && !this.isWithinRange(date, Number(range))) {
+            if (range !== "all" && range !== "custom" &&
+                !this.isWithinRange(date, Number(range))) {
 
                 return false;
 
@@ -446,18 +413,6 @@ const History = {
             if (endDate && date > endDate) {
 
                 return false;
-
-            }
-
-            if (selectedStatuses.length) {
-
-                const status = this.getStatusKey(record);
-
-                if (!selectedStatuses.includes(status)) {
-
-                    return false;
-
-                }
 
             }
 

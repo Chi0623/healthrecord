@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC1
+   安心血壓 v1.0 RC3
    Google Apps Script
 ========================================================== */
 
@@ -77,6 +77,10 @@ const SHEET_HEADERS = [
 
         case "getUsers":
           result = getUsers();
+          break;
+
+        case "renameUser":
+          result = renameUser(data);
           break;
   
         default:
@@ -719,6 +723,74 @@ const SHEET_HEADERS = [
     return successResponse("", names);
 
   }
+
+  function renameUser(data) {
+
+    const oldUser = String(data && data.oldUser || "").trim();
+    const newUser = String(data && data.newUser || "").trim();
+
+    if (!oldUser || !newUser) {
+
+      throw new Error("新舊使用者姓名不可空白");
+
+    }
+
+    if (oldUser === newUser) {
+
+      return successResponse("姓名未變更", { updated: 0 });
+
+    }
+
+    const lock = LockService.getDocumentLock();
+
+    lock.waitLock(3000);
+
+    try {
+
+      const ws = sheet();
+
+      ensureSheetHeader(ws);
+
+      const lastRow = ws.getLastRow();
+
+      if (lastRow <= 1) {
+
+        return successResponse("使用者姓名已更新", { updated: 0 });
+
+      }
+
+      const range = ws.getRange(2, 1, lastRow - 1, 1);
+      const values = range.getValues();
+      let updated = 0;
+
+      values.forEach(function(row) {
+
+        if (String(row[0] || "").trim() === oldUser) {
+
+          row[0] = newUser;
+          updated += 1;
+
+        }
+
+      });
+
+      if (updated) {
+
+        range.setValues(values);
+
+      }
+
+      return successResponse("使用者姓名已更新", { updated: updated });
+
+    }
+
+    finally {
+
+      lock.releaseLock();
+
+    }
+
+  }
   
   /* ==========================================================
      Update
@@ -755,7 +827,7 @@ const SHEET_HEADERS = [
         ws
           .getRange(found.index + 1, 1, 1, SHEET_HEADERS.length)
           .setValues([
-            createSheetRow(record, new Date())
+            createSheetRow(record, found.data.datetime)
           ]);
 
         return successResponse("更新成功", {

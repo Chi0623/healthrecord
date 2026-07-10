@@ -221,6 +221,14 @@ body{
 
 }
 
+#page-history,
+#page-chart,
+#page-settings{
+
+    margin-top:12px;
+
+}
+
 /* ===========================
    Card Base
 =========================== */
@@ -902,6 +910,14 @@ body{
 
 .theme-option-btn{
 
+    display:flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:8px;
+
     min-height:54px;
 
     padding:0 12px;
@@ -919,6 +935,16 @@ body{
     font-weight:800;
 
     cursor:pointer;
+
+}
+
+.theme-option-btn .chip-icon{
+
+    width:22px;
+
+    height:22px;
+
+    stroke-width:2.35;
 
 }
 
@@ -1866,6 +1892,8 @@ body.is-keyboard-open .tabbar{
 .history-filter-group-scroll,
 .chart-filter-group-scroll{
 
+    width:100%;
+
     flex-wrap:nowrap;
 
     overflow-x:auto;
@@ -1894,6 +1922,13 @@ body.is-keyboard-open .tabbar{
 
 }
 
+.history-filter-group-scroll [data-filter-type="range"][data-filter-value="all"],
+.chart-filter-group-scroll [data-chart-range="all"]{
+
+    order:-1;
+
+}
+
 .history-filters,
 .chart-filters{
 
@@ -1904,6 +1939,12 @@ body.is-keyboard-open .tabbar{
 .history-advanced-filters{
 
     display:flex;
+
+    width:100%;
+
+    align-self:stretch;
+
+    box-sizing:border-box;
 
     flex-direction:column;
 
@@ -3115,6 +3156,14 @@ body.is-keyboard-open .tabbar{
 .settings-primary-btn,
 .settings-secondary-btn{
 
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:8px;
+
     min-height:42px;
 
     padding:0 14px;
@@ -3146,6 +3195,208 @@ body.is-keyboard-open .tabbar{
     background:rgba(142,142,147,.10);
 
     color:var(--text);
+
+}
+
+.settings-connection-test{
+
+    display:flex;
+
+    flex-direction:column;
+
+    align-items:stretch;
+
+    gap:10px;
+
+    flex-wrap:nowrap;
+
+}
+
+.settings-connection-test .settings-secondary-btn{
+
+    width:100%;
+
+    min-height:46px;
+
+}
+
+.settings-connection-status{
+
+    width:100%;
+
+    flex:0 0 auto;
+
+    color:var(--secondary);
+
+    font-size:.86rem;
+
+    line-height:1.45;
+
+}
+
+.settings-connection-status[data-state="success"]{
+
+    color:#248A3D;
+
+}
+
+.settings-connection-status[data-state="error"]{
+
+    color:var(--sys);
+
+}
+
+.settings-connection-status[data-state="testing"]{
+
+    color:var(--primary);
+
+}
+
+.settings-rename-user-btn{
+
+    width:100%;
+
+}
+
+.settings-inline-panel{
+
+    display:grid;
+
+    grid-template-columns:minmax(0, 1fr) auto;
+
+    align-items:end;
+
+    gap:10px;
+
+    padding:12px;
+
+    border-radius:14px;
+
+    background:rgba(142,142,147,.08);
+
+}
+
+.settings-inline-panel[hidden]{
+
+    display:none;
+
+}
+
+.settings-inline-panel .settings-primary-btn{
+
+    min-height:46px;
+
+    white-space:nowrap;
+
+}
+
+@media (max-width:560px){
+
+    .settings-inline-panel{
+
+        grid-template-columns:1fr;
+
+    }
+
+}
+
+.settings-privacy-note{
+
+    margin-top:14px;
+
+    padding:12px 14px;
+
+    border-radius:14px;
+
+    background:rgba(52,199,89,.10);
+
+    color:var(--text);
+
+    font-size:.9rem;
+
+    line-height:1.5;
+
+}
+
+.settings-danger-btn{
+
+    width:100%;
+
+    min-height:46px;
+
+    margin-top:14px;
+
+    padding:0 14px;
+
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:8px;
+
+    border:none;
+
+    border-radius:14px;
+
+    background:rgba(255,59,48,.12);
+
+    color:var(--sys);
+
+    font-size:.95rem;
+
+    font-weight:800;
+
+    cursor:pointer;
+
+}
+
+.settings-version-list{
+
+    margin-top:14px;
+
+    border-radius:14px;
+
+    overflow:hidden;
+
+    background:rgba(142,142,147,.08);
+
+}
+
+.settings-version-row{
+
+    min-height:46px;
+
+    padding:0 14px;
+
+    display:flex;
+
+    align-items:center;
+
+    justify-content:space-between;
+
+    gap:14px;
+
+    border-bottom:1px solid rgba(142,142,147,.14);
+
+    color:var(--secondary);
+
+    font-size:.9rem;
+
+}
+
+.settings-version-row:last-child{
+
+    border-bottom:none;
+
+}
+
+.settings-version-row strong{
+
+    color:var(--text);
+
+    text-align:right;
 
 }
 
@@ -4771,6 +5022,14 @@ body{
 .setup-copy-btn,
 .setup-guide-back-btn{
 
+    display:inline-flex;
+
+    align-items:center;
+
+    justify-content:center;
+
+    gap:8px;
+
     min-height:48px;
 
     padding:0 16px;
@@ -4784,6 +5043,38 @@ body{
     font-weight:800;
 
     cursor:pointer;
+
+}
+
+.button-action-icon{
+
+    width:22px;
+
+    height:22px;
+
+    display:block;
+
+    flex:0 0 auto;
+
+    fill:none;
+
+    stroke:currentColor;
+
+    stroke-width:2;
+
+    stroke-linecap:round;
+
+    stroke-linejoin:round;
+
+}
+
+.setup-guide-back-icon{
+
+    font-size:1.35rem;
+
+    font-weight:700;
+
+    line-height:1;
 
 }
 

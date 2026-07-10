@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC1
+   安心血壓 v1.0 RC3
    api.js
 ========================================================== */
 
@@ -132,7 +132,7 @@ function normalizeRecordList(records) {
    共用 Request
 ========================================================== */
 
-async function apiRequest(action, data = {}) {
+async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
 
     try {
 
@@ -154,7 +154,15 @@ async function apiRequest(action, data = {}) {
 
         });
 
-        const response = await fetch(getApiUrl(), {
+        const url = String(apiUrl || "").trim();
+
+        if (!url) {
+
+            throw new Error("尚未設定 Apps Script 網址");
+
+        }
+
+        const response = await fetch(url, {
 
             method: "POST",
 
@@ -310,9 +318,9 @@ async function getTodayRecord(user) {
 
 }
 
-async function getUsers() {
+async function getUsers(apiUrl) {
 
-    const result = await apiRequest("getUsers");
+    const result = await apiRequest("getUsers", {}, apiUrl || getApiUrl());
 
     if (!result.success || !Array.isArray(result.data)) {
 
@@ -321,6 +329,18 @@ async function getUsers() {
     }
 
     return result;
+
+}
+
+async function renameUser(oldUser, newUser) {
+
+    return await apiRequest("renameUser", {
+
+        oldUser,
+
+        newUser
+
+    });
 
 }
 

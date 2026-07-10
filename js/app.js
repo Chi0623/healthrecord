@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC1
+   安心血壓 v1.0 RC3
    app.js
 ========================================================== */
 
@@ -292,7 +292,27 @@ const App = {
 
             settingsAddUserBtn: document.getElementById("settingsAddUserBtn"),
 
+            settingsNewUserInput: document.getElementById("settingsNewUserInput"),
+
+            settingsAddUserPanel: document.getElementById("settingsAddUserPanel"),
+
+            settingsConfirmAddUserBtn: document.getElementById("settingsConfirmAddUserBtn"),
+
             settingsSaveBtn: document.getElementById("settingsSaveBtn"),
+
+            settingsTestConnectionBtn: document.getElementById("settingsTestConnectionBtn"),
+
+            settingsConnectionStatus: document.getElementById("settingsConnectionStatus"),
+
+            settingsRenameUserBtn: document.getElementById("settingsRenameUserBtn"),
+
+            settingsRenameUserInput: document.getElementById("settingsRenameUserInput"),
+
+            settingsRenameUserPanel: document.getElementById("settingsRenameUserPanel"),
+
+            settingsConfirmRenameUserBtn: document.getElementById("settingsConfirmRenameUserBtn"),
+
+            settingsClearLocalBtn: document.getElementById("settingsClearLocalBtn"),
 
             settingsConnectionDetails: document.getElementById("settingsConnectionDetails"),
 
@@ -390,9 +410,59 @@ const App = {
 
         }
 
+        if (this.elements.settingsTestConnectionBtn) {
+
+            this.elements.settingsTestConnectionBtn.addEventListener("click", async () => {
+
+                await this.testConnection();
+
+            });
+
+        }
+
+        if (this.elements.settingsRenameUserBtn) {
+
+            this.elements.settingsRenameUserBtn.addEventListener("click", () => {
+
+                this.toggleUserPanel("rename");
+
+            });
+
+        }
+
+        if (this.elements.settingsConfirmRenameUserBtn) {
+
+            this.elements.settingsConfirmRenameUserBtn.addEventListener("click", async () => {
+
+                await this.promptRenameUser();
+
+            });
+
+        }
+
+        if (this.elements.settingsClearLocalBtn) {
+
+            this.elements.settingsClearLocalBtn.addEventListener("click", () => {
+
+                this.clearLocalSettings();
+
+            });
+
+        }
+
         if (this.elements.settingsAddUserBtn) {
 
             this.elements.settingsAddUserBtn.addEventListener("click", () => {
+
+                this.toggleUserPanel("add");
+
+            });
+
+        }
+
+        if (this.elements.settingsConfirmAddUserBtn) {
+
+            this.elements.settingsConfirmAddUserBtn.addEventListener("click", () => {
 
                 this.promptAddUser();
 
@@ -1436,6 +1506,12 @@ const App = {
 
         }
 
+        if (this.elements.settingsRenameUserInput) {
+
+            this.elements.settingsRenameUserInput.value = this.getUserName();
+
+        }
+
     },
 
     hasApiUrl() {
@@ -1478,7 +1554,7 @@ const App = {
 
         if (!this.elements.settingsUserOptions) {
 
-            return;
+            return [];
 
         }
 
@@ -1487,7 +1563,7 @@ const App = {
 
         if (typeof getUsers !== "function") {
 
-            return;
+            return [];
 
         }
 
@@ -1501,7 +1577,7 @@ const App = {
 
             }
 
-            return;
+            return [];
 
         }
 
@@ -1513,6 +1589,88 @@ const App = {
             this.showToast("已更新姓名名單");
 
         }
+
+        return result.data || [];
+
+    },
+
+    async testConnection() {
+
+        const button = this.elements.settingsTestConnectionBtn;
+        const status = this.elements.settingsConnectionStatus;
+        const url = String(
+            this.elements.settingsApiUrl && this.elements.settingsApiUrl.value || ""
+        ).trim();
+
+        if (!url) {
+
+            this.setConnectionStatus("請先輸入 Apps Script 網址", "error");
+            return false;
+
+        }
+
+        if (typeof getUsers !== "function") {
+
+            this.setConnectionStatus("連線功能尚未載入", "error");
+            return false;
+
+        }
+
+        if (button) button.disabled = true;
+
+        this.setConnectionStatus("正在測試連線…", "testing");
+
+        try {
+
+            const result = await getUsers(url);
+
+            if (!result.success) {
+
+                this.setConnectionStatus(
+                    `連線失敗：${result.message || "無法讀取工作表"}`,
+                    "error"
+                );
+                return false;
+
+            }
+
+            const users = Array.isArray(result.data) ? result.data : [];
+
+            this.state.userOptions = this.getMergedUserOptions(users);
+            this.renderUserOptions();
+            this.setConnectionStatus(
+                `連線成功，已找到血壓紀錄工作表與 ${users.length} 位使用者`,
+                "success"
+            );
+
+            return true;
+
+        }
+
+        catch (err) {
+
+            console.error("[Settings] connection test failed", err);
+            this.setConnectionStatus(`連線失敗：${err.message}`, "error");
+            return false;
+
+        }
+
+        finally {
+
+            if (button) button.disabled = false;
+
+        }
+
+    },
+
+    setConnectionStatus(message, state = "") {
+
+        const status = this.elements.settingsConnectionStatus;
+
+        if (!status) return;
+
+        status.textContent = message;
+        status.dataset.state = state;
 
     },
 
@@ -1549,9 +1707,9 @@ const App = {
 
             option.classList.toggle("active", name === currentUser);
 
-            option.addEventListener("click", () => {
+            option.addEventListener("click", async () => {
 
-                this.selectUserOption(name);
+                await this.selectUserOption(name);
 
             });
 
@@ -1636,26 +1794,33 @@ const App = {
 
     },
 
-    selectUserOption(name) {
+    async selectUserOption(name) {
 
         const userName = this.normalizeUserName(name);
 
         localStorage.setItem("bp-user", userName);
 
+        if (this.elements.settingsRenameUserInput) {
+
+            this.elements.settingsRenameUserInput.value = userName;
+
+        }
+
         this.renderUserOptions();
         this.renderGreeting();
+
+        if (this.hasApiUrl()) {
+
+            await this.refreshCurrentUserData();
+
+        }
 
     },
 
     promptAddUser() {
 
-        const input = window.prompt("請輸入新增使用者姓名");
-
-        if (input === null) {
-
-            return;
-
-        }
+        const input = this.elements.settingsNewUserInput &&
+            this.elements.settingsNewUserInput.value;
 
         const userName = this.normalizeUserName(input);
 
@@ -1663,21 +1828,180 @@ const App = {
 
             this.showToast("請輸入姓名");
 
+            if (this.elements.settingsNewUserInput) {
+
+                this.elements.settingsNewUserInput.focus();
+
+            }
+
             return;
 
         }
 
         localStorage.setItem("bp-user", userName);
+        this.elements.settingsNewUserInput.value = "";
+
+        if (this.elements.settingsRenameUserInput) {
+
+            this.elements.settingsRenameUserInput.value = userName;
+
+        }
+
         this.saveLocalUserOption(userName);
         this.renderGreeting();
+        this.setUserPanelVisible("add", false);
         this.showToast("已新增使用者");
+
+    },
+
+    async promptRenameUser() {
+
+        const oldUser = this.getUserName();
+        const newUser = String(
+            this.elements.settingsRenameUserInput &&
+            this.elements.settingsRenameUserInput.value || ""
+        ).trim();
+
+        if (!newUser) {
+
+            this.showToast("請輸入姓名", "error");
+            return;
+
+        }
+
+        if (newUser === oldUser) {
+
+            this.showToast("姓名沒有變更", "info");
+            return;
+
+        }
+
+        if (this.hasApiUrl() && typeof renameUser === "function") {
+
+            const result = await renameUser(oldUser, newUser);
+
+            if (!result.success) {
+
+                this.showToast(result.message || "重新命名失敗", "error");
+                return;
+
+            }
+
+        }
+
+        const localOptions = this.getLocalUserOptions()
+            .map(name => name === oldUser ? newUser : name);
+
+        localStorage.setItem("bp-user", newUser);
+
+        if (this.elements.settingsRenameUserInput) {
+
+            this.elements.settingsRenameUserInput.value = newUser;
+
+        }
+        localStorage.setItem(
+            this.localUserOptionsKey,
+            JSON.stringify(Array.from(new Set([...localOptions, newUser])))
+        );
+
+        this.state.userOptions = this.state.userOptions
+            .map(name => name === oldUser ? newUser : name)
+            .filter((name, index, list) => list.indexOf(name) === index);
+
+        this.renderUserOptions();
+        this.renderGreeting();
+
+        if (this.hasApiUrl()) {
+
+            await this.refreshCurrentUserData();
+
+        }
+
+        this.setUserPanelVisible("rename", false);
+        this.showToast("使用者姓名已更新");
+
+    },
+
+    toggleUserPanel(type) {
+
+        const panel = type === "add"
+            ? this.elements.settingsAddUserPanel
+            : this.elements.settingsRenameUserPanel;
+
+        const willOpen = Boolean(panel && panel.hidden);
+
+        if (willOpen) {
+
+            this.setUserPanelVisible(type === "add" ? "rename" : "add", false);
+
+        }
+
+        this.setUserPanelVisible(type, willOpen);
+
+    },
+
+    setUserPanelVisible(type, visible) {
+
+        const isAdd = type === "add";
+        const panel = isAdd
+            ? this.elements.settingsAddUserPanel
+            : this.elements.settingsRenameUserPanel;
+        const trigger = isAdd
+            ? this.elements.settingsAddUserBtn
+            : this.elements.settingsRenameUserBtn;
+        const input = isAdd
+            ? this.elements.settingsNewUserInput
+            : this.elements.settingsRenameUserInput;
+
+        if (!panel) return;
+
+        panel.hidden = !visible;
+
+        if (trigger) trigger.setAttribute("aria-expanded", visible ? "true" : "false");
+
+        if (visible && input) {
+
+            if (!isAdd) input.value = this.getUserName();
+            input.focus();
+            input.select();
+
+        }
+
+    },
+
+    async refreshCurrentUserData() {
+
+        await this.refreshToday();
+
+        if (window.History) await History.load();
+        if (window.ChartPage) await ChartPage.load();
+
+    },
+
+    clearLocalSettings() {
+
+        const confirmed = window.confirm(
+            "確定清除這台裝置的 Apps Script 網址、使用者姓名與顯示設定嗎？Google Sheet 紀錄不會被刪除。"
+        );
+
+        if (!confirmed) return;
+
+        [
+            "bp-api-url",
+            "bp-user",
+            "bp-user-id",
+            this.localUserOptionsKey,
+            this.themeKey
+        ].forEach(key => localStorage.removeItem(key));
+
+        window.location.reload();
 
     },
 
     async saveSettings() {
 
         const apiInput = this.elements.settingsApiUrl;
-        const userName = this.getUserName();
+        const hadApiUrl = this.hasApiUrl();
 
         const userId = this.getUserProfile().id || this.createUserId();
 
@@ -1687,6 +2011,28 @@ const App = {
             apiInput.value = getApiUrl();
 
         }
+
+        const existingUsers = await this.loadUserOptions();
+        const currentUser = this.getUserName();
+        const currentIsExisting = existingUsers.includes(currentUser);
+
+        if (!hadApiUrl && existingUsers.length && !currentIsExisting) {
+
+            if (existingUsers.length === 1) {
+
+                await this.selectUserOption(existingUsers[0]);
+
+            } else {
+
+                this.showToast("已載入既有姓名，請先選擇使用者", "info");
+
+                return;
+
+            }
+
+        }
+
+        const userName = this.getUserName();
 
         localStorage.setItem("bp-user", userName);
         localStorage.setItem("bp-user-id", userId);
@@ -1707,8 +2053,6 @@ const App = {
             await ChartPage.load();
 
         }
-
-        await this.loadUserOptions();
 
         this.showToast("已儲存設定");
 
@@ -2458,11 +2802,11 @@ const App = {
 
 
 
-    saveFailed() {
+    saveFailed(message = "儲存失敗，請再按一次") {
 
         this.setSaveButtonLabel("儲存紀錄");
 
-        this.showToast("儲存失敗，請再按一次");
+        this.showToast(message, "error");
 
     },
 
