@@ -695,7 +695,86 @@ const App = {
 
     getCurrentOcrTemplate() {
 
-        return this.getOcrTemplates()[this.getUserName()] || null;
+        return this.normalizeOcrTemplate(
+            this.getOcrTemplates()[this.getUserName()] || null
+        );
+
+    },
+
+    normalizeOcrTemplate(template) {
+
+        if (!template || typeof template !== "object") {
+
+            return null;
+
+        }
+
+        if (template.version === 2 && template.lcd && template.fields) {
+
+            return template;
+
+        }
+
+        if (template.lcd && template.fields) {
+
+            return {
+                ...template,
+                version: 2
+            };
+
+        }
+
+        if (template.sys && template.dia && template.pulse) {
+
+            return {
+                version: 1,
+                sys: template.sys,
+                dia: template.dia,
+                pulse: template.pulse,
+                updatedAt: template.updatedAt || ""
+            };
+
+        }
+
+        return null;
+
+    },
+
+    createOcrTemplateV2(rects) {
+
+        const lcd = rects.lcd;
+
+        return {
+            version: 2,
+            lcd,
+            fields: {
+                sys: this.convertRectToBase(rects.sys, lcd),
+                dia: this.convertRectToBase(rects.dia, lcd),
+                pulse: this.convertRectToBase(rects.pulse, lcd)
+            }
+        };
+
+    },
+
+    convertRectToBase(rect, base) {
+
+        return {
+            x: (rect.x - base.x) / base.width,
+            y: (rect.y - base.y) / base.height,
+            width: rect.width / base.width,
+            height: rect.height / base.height
+        };
+
+    },
+
+    convertRectFromBase(rect, base) {
+
+        return {
+            x: base.x + rect.x * base.width,
+            y: base.y + rect.y * base.height,
+            width: rect.width * base.width,
+            height: rect.height * base.height
+        };
 
     },
 
@@ -789,7 +868,9 @@ const App = {
         const template = this.getCurrentOcrTemplate();
 
         this.elements.ocrTemplateStatus.textContent = template
-            ? "已設定目前使用者的 OCR 位置"
+            ? template.version === 2
+                ? "已設定 OCR v2：LCD 螢幕與數字位置"
+                : "已設定舊版 OCR 位置，建議重新設定 v2"
             : "尚未設定目前使用者的 OCR 位置";
 
     },
@@ -808,7 +889,7 @@ const App = {
         }
 
         this.ocr.templateRects = {};
-        this.ocr.templateStep = "sys";
+        this.ocr.templateStep = "lcd";
         this.ocr.templateImage = null;
         this.updateOcrTemplateHint();
         this.syncOcrTemplateSteps();
@@ -990,13 +1071,24 @@ const App = {
 
     async advanceOcrTemplateStep() {
 
-        const steps = ["sys", "dia", "pulse"];
+        const steps = ["lcd", "sys", "dia", "pulse"];
         const currentIndex = steps.indexOf(this.ocr.templateStep);
         const rect = this.ocr.templateRects[this.ocr.templateStep];
 
         if (!rect || rect.width < .02 || rect.height < .02) {
 
             this.showToast("請框選較大的數字區域");
+
+            return;
+
+        }
+
+        if (
+            this.ocr.templateStep !== "lcd" &&
+            !this.isRectInsideBase(rect, this.ocr.templateRects.lcd)
+        ) {
+
+            this.showToast("請在 LCD 螢幕範圍內框選");
 
             return;
 
@@ -1012,13 +1104,63 @@ const App = {
 
         }
 
-        await this.saveCurrentOcrTemplate({
-            sys: this.ocr.templateRects.sys,
-            dia: this.ocr.templateRects.dia,
-            pulse: this.ocr.templateRects.pulse
-        });
+        const template = this.createOcrTemplateV2(this.ocr.templateRects);
+
+        await this.saveCurrentOcrTemplate(template);
+        await this.testOcrTemplate(template);
         this.cancelOcrTemplateSetup();
-        this.showToast("已儲存 OCR 位置");
+
+    },
+
+    async testOcrTemplate(template) {
+
+        if (!window.Tesseract || !this.ocr.templateImage) {
+
+            this.showToast("已儲存 OCR 位置");
+
+            return;
+
+        }
+
+        if (this.elements.ocrTemplateHint) {
+
+            this.elements.ocrTemplateHint.textContent = "正在測試 OCR 位置";
+
+        }
+
+        const values = await this.recognizeBloodPressureWithTemplateV2(
+            this.ocr.templateImage,
+            template
+        );
+
+        if (values) {
+
+            this.showToast(
+                `OCR 測試 ${values.sys}/${values.dia} 脈搏 ${values.pulse}`
+            );
+
+            return;
+
+        }
+
+        this.showToast("已儲存，測試未成功可重新設定");
+
+    },
+
+    isRectInsideBase(rect, base) {
+
+        if (!rect || !base) {
+
+            return false;
+
+        }
+
+        return (
+            rect.x >= base.x &&
+            rect.y >= base.y &&
+            rect.x + rect.width <= base.x + base.width &&
+            rect.y + rect.height <= base.y + base.height
+        );
 
     },
 
@@ -1042,7 +1184,11 @@ const App = {
             const height = rect.height * canvas.height;
 
             ctx.lineWidth = 4;
-            ctx.strokeStyle = key === this.ocr.templateStep ? "#007AFF" : "#34C759";
+            ctx.strokeStyle = key === "lcd"
+                ? "#FF9500"
+                : key === this.ocr.templateStep
+                    ? "#007AFF"
+                    : "#34C759";
             ctx.strokeRect(x, y, width, height);
             ctx.fillStyle = "rgba(0,122,255,.18)";
             ctx.fillRect(x, y, width, height);
@@ -1074,6 +1220,7 @@ const App = {
         if (!this.elements.ocrTemplateHint) return;
 
         const labels = {
+            lcd: "請先框選 LCD 螢幕範圍",
             sys: "請拖曳框選 SYS 數字",
             dia: "請拖曳框選 DIA 數字",
             pulse: "請拖曳框選 Pulse 數字"
@@ -1316,9 +1463,79 @@ const App = {
         if (!template) return null;
 
         const bitmap =
-            source instanceof HTMLCanvasElement
+            this.isOcrBitmapSource(source)
                 ? source
                 : await this.loadOcrBitmap(source);
+
+        if (template.version === 2) {
+
+            return await this.recognizeBloodPressureWithTemplateV2(
+                bitmap,
+                template
+            );
+
+        }
+
+        return await this.recognizeBloodPressureWithLegacyTemplate(
+            bitmap,
+            template
+        );
+
+    },
+
+    async recognizeBloodPressureWithTemplateV2(bitmap, template) {
+
+        const lcdCanvas = this.createOcrCanvas(
+            bitmap,
+            this.rectToPixelCrop(template.lcd, bitmap.width, bitmap.height),
+            "grayscale"
+        );
+        const fields = {
+            sys: {
+                rect: template.fields.sys,
+                range: [50, 280]
+            },
+            dia: {
+                rect: template.fields.dia,
+                range: [30, 180]
+            },
+            pulse: {
+                rect: template.fields.pulse,
+                range: [30, 220]
+            }
+        };
+        const values = {};
+
+        for (const key of Object.keys(fields)) {
+
+            const value = await this.recognizeTemplateField(
+                lcdCanvas,
+                fields[key].rect,
+                fields[key].range
+            );
+
+            if (!Number.isFinite(value)) {
+
+                return null;
+
+            }
+
+            values[key] = value;
+
+        }
+
+        return this.isOcrBloodPressureValid(
+            values.sys,
+            values.dia,
+            values.pulse
+        )
+            ? values
+            : null;
+
+    },
+
+    async recognizeBloodPressureWithLegacyTemplate(bitmap, template) {
+
         const fields = {
             sys: {
                 rect: template.sys,
@@ -1363,16 +1580,22 @@ const App = {
 
     },
 
+    rectToPixelCrop(rect, width, height) {
+
+        return {
+            x: rect.x * width,
+            y: rect.y * height,
+            width: rect.width * width,
+            height: rect.height * height
+        };
+
+    },
+
     async recognizeTemplateField(bitmap, rect, range) {
 
         if (!rect) return null;
 
-        const crop = {
-            x: rect.x * bitmap.width,
-            y: rect.y * bitmap.height,
-            width: rect.width * bitmap.width,
-            height: rect.height * bitmap.height
-        };
+        const crop = this.rectToPixelCrop(rect, bitmap.width, bitmap.height);
         const images = [
             this.createOcrCanvas(bitmap, crop, "lcd"),
             this.createOcrCanvas(bitmap, crop, "contrast"),
@@ -1519,7 +1742,7 @@ const App = {
     async prepareOcrImages(source) {
 
         const bitmap =
-            source instanceof HTMLCanvasElement
+            this.isOcrBitmapSource(source)
                 ? source
                 : await this.loadOcrBitmap(source);
         const crops = this.getOcrCropCandidates(bitmap.width, bitmap.height);
@@ -1695,6 +1918,18 @@ const App = {
             image.src = url;
 
         });
+
+    },
+
+    isOcrBitmapSource(source) {
+
+        return (
+            source instanceof HTMLCanvasElement ||
+            (
+                typeof HTMLImageElement !== "undefined" &&
+                source instanceof HTMLImageElement
+            )
+        );
 
     },
 

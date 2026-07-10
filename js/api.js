@@ -337,13 +337,17 @@ async function getOcrTemplate(user) {
 
 async function saveOcrTemplate(user, template) {
 
+    const fields = template.fields || template;
+
     return await apiRequest(
         "saveOcrTemplate",
         {
             user,
-            sys: JSON.stringify(template.sys),
-            dia: JSON.stringify(template.dia),
-            pulse: JSON.stringify(template.pulse)
+            version: template.version || 1,
+            lcd: template.lcd ? JSON.stringify(template.lcd) : "",
+            sys: JSON.stringify(fields.sys),
+            dia: JSON.stringify(fields.dia),
+            pulse: JSON.stringify(fields.pulse)
         }
     );
 

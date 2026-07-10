@@ -37,6 +37,16 @@ const OCR_TEMPLATE_HEADERS = [
 
   "User",
 
+  "Version",
+
+  "LcdX",
+
+  "LcdY",
+
+  "LcdW",
+
+  "LcdH",
+
   "SysX",
 
   "SysY",
@@ -841,8 +851,26 @@ const OCR_TEMPLATE_HEADERS = [
 
     }
 
+    const version = Number(data.version || 1);
+
+    if (version >= 2) {
+
+      return {
+        user: user,
+        version: 2,
+        lcd: validateOcrRect(data.lcd, "LCD"),
+        fields: {
+          sys: validateOcrRect(data.sys, "SYS"),
+          dia: validateOcrRect(data.dia, "DIA"),
+          pulse: validateOcrRect(data.pulse, "Pulse")
+        }
+      };
+
+    }
+
     return {
       user: user,
+      version: 1,
       sys: validateOcrRect(data.sys, "SYS"),
       dia: validateOcrRect(data.dia, "DIA"),
       pulse: validateOcrRect(data.pulse, "Pulse")
@@ -895,8 +923,39 @@ const OCR_TEMPLATE_HEADERS = [
 
   function createOcrTemplateRow(template, updatedAt) {
 
+    if (template.version >= 2) {
+
+      return [
+        template.user,
+        2,
+        template.lcd.x,
+        template.lcd.y,
+        template.lcd.width,
+        template.lcd.height,
+        template.fields.sys.x,
+        template.fields.sys.y,
+        template.fields.sys.width,
+        template.fields.sys.height,
+        template.fields.dia.x,
+        template.fields.dia.y,
+        template.fields.dia.width,
+        template.fields.dia.height,
+        template.fields.pulse.x,
+        template.fields.pulse.y,
+        template.fields.pulse.width,
+        template.fields.pulse.height,
+        Utilities.formatDate(updatedAt || new Date(), CONFIG.TIMEZONE, "yyyy-MM-dd HH:mm:ss")
+      ];
+
+    }
+
     return [
       template.user,
+      1,
+      "",
+      "",
+      "",
+      "",
       template.sys.x,
       template.sys.y,
       template.sys.width,
@@ -916,14 +975,79 @@ const OCR_TEMPLATE_HEADERS = [
 
   function readOcrTemplateRow(row) {
 
-    if (!row || row.length < OCR_TEMPLATE_HEADERS.length) {
+    if (!row || row.length < 14) {
 
       return null;
 
     }
 
+    if (Number(row[1]) >= 2) {
+
+      return {
+        user: String(row[0] || "").trim(),
+        version: 2,
+        lcd: {
+          x: Number(row[2]),
+          y: Number(row[3]),
+          width: Number(row[4]),
+          height: Number(row[5])
+        },
+        fields: {
+          sys: {
+            x: Number(row[6]),
+            y: Number(row[7]),
+            width: Number(row[8]),
+            height: Number(row[9])
+          },
+          dia: {
+            x: Number(row[10]),
+            y: Number(row[11]),
+            width: Number(row[12]),
+            height: Number(row[13])
+          },
+          pulse: {
+            x: Number(row[14]),
+            y: Number(row[15]),
+            width: Number(row[16]),
+            height: Number(row[17])
+          }
+        },
+        updatedAt: row[18]
+      };
+
+    }
+
+    if (Number(row[1]) === 1) {
+
+      return {
+        user: String(row[0] || "").trim(),
+        version: 1,
+        sys: {
+          x: Number(row[6]),
+          y: Number(row[7]),
+          width: Number(row[8]),
+          height: Number(row[9])
+        },
+        dia: {
+          x: Number(row[10]),
+          y: Number(row[11]),
+          width: Number(row[12]),
+          height: Number(row[13])
+        },
+        pulse: {
+          x: Number(row[14]),
+          y: Number(row[15]),
+          width: Number(row[16]),
+          height: Number(row[17])
+        },
+        updatedAt: row[18]
+      };
+
+    }
+
     return {
       user: String(row[0] || "").trim(),
+      version: 1,
       sys: {
         x: Number(row[1]),
         y: Number(row[2]),
