@@ -718,6 +718,8 @@ const App = {
                     "eng",
                     {
                         logger: progress => this.updateOcrProgress(progress),
+                        tessedit_pageseg_mode: "6",
+                        user_defined_dpi: "300",
                         tessedit_char_whitelist:
                             "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz血壓压收縮缩舒張张脈脉搏拍心率高低/: "
                     }
@@ -874,33 +876,90 @@ const App = {
             source instanceof HTMLCanvasElement
                 ? source
                 : await this.loadOcrBitmap(source);
-        const maxSide = 1600;
-        const scale = Math.min(
-            1,
-            maxSide / Math.max(bitmap.width, bitmap.height)
-        );
-        const canvas = document.createElement("canvas");
-
-        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
-        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
-
-        return [
-            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "contrast"),
-            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "threshold"),
-            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "grayscale")
+        const crops = this.getOcrCropCandidates(bitmap.width, bitmap.height);
+        const modes = [
+            "lcd",
+            "contrast",
+            "threshold",
+            "grayscale"
         ];
+        const images = [];
+
+        crops.forEach(crop => {
+
+            modes.forEach(mode => {
+
+                images.push(this.createOcrCanvas(bitmap, crop, mode));
+
+            });
+
+        });
+
+        return images;
 
     },
 
-    createOcrCanvas(bitmap, width, height, mode) {
+    getOcrCropCandidates(width, height) {
+
+        return [
+            {
+                x: 0,
+                y: 0,
+                width,
+                height
+            },
+            {
+                x: width * .08,
+                y: height * .18,
+                width: width * .68,
+                height: height * .68
+            },
+            {
+                x: width * .30,
+                y: height * .22,
+                width: width * .42,
+                height: height * .58
+            },
+            {
+                x: width * .18,
+                y: height * .22,
+                width: width * .58,
+                height: height * .62
+            }
+        ].map(crop => ({
+            x: Math.max(0, Math.round(crop.x)),
+            y: Math.max(0, Math.round(crop.y)),
+            width: Math.max(1, Math.round(Math.min(crop.width, width - crop.x))),
+            height: Math.max(1, Math.round(Math.min(crop.height, height - crop.y)))
+        }));
+
+    },
+
+    createOcrCanvas(bitmap, crop, mode) {
 
         const canvas = document.createElement("canvas");
+        const targetLongSide = 1800;
+        const cropLongSide = Math.max(crop.width, crop.height);
+        const scale = Math.max(
+            1,
+            Math.min(3, targetLongSide / cropLongSide)
+        );
 
-        canvas.width = width;
-        canvas.height = height;
+        canvas.width = Math.max(1, Math.round(crop.width * scale));
+        canvas.height = Math.max(1, Math.round(crop.height * scale));
 
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(bitmap, 0, 0, width, height);
+        ctx.drawImage(
+            bitmap,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
@@ -915,6 +974,19 @@ const App = {
             if (mode === "threshold") {
 
                 const contrast = gray > 120 ? 255 : 0;
+
+                data[i] = contrast;
+                data[i + 1] = contrast;
+                data[i + 2] = contrast;
+
+            } else if (mode === "lcd") {
+
+                const enhanced = Math.max(
+                    0,
+                    Math.min(255, (gray - 82) * 3.1)
+                );
+
+                const contrast = enhanced > 105 ? 255 : 0;
 
                 data[i] = contrast;
                 data[i + 1] = contrast;
@@ -987,7 +1059,10 @@ const App = {
             .replace(/[|]/g, "I")
             .replace(/[^\dA-Z\u4E00-\u9FFF/\n\r :.-]+/g, " ");
 
-        const numbers = (normalized.match(/\b\d{2,3}\b/g) || [])
+        const numbers = (normalized.match(/\b[0-9OQILSB]{2,3}\b/g) || [])
+            .filter(value => /\d/.test(value))
+            .map(value => this.normalizeOcrNumberToken(value))
+            .filter(value => value !== "")
             .map(value => Number(value))
             .filter(value => value >= 30 && value <= 280);
 
@@ -1085,11 +1160,13 @@ const App = {
 
                 if (!hasCurrentLabel && !hasSplitLabel) return;
 
-                const match = valueText.match(/\b\d{2,3}\b/);
+                const match = valueText.match(/\b[0-9OQILSB]{2,3}\b/);
 
                 if (!match) return;
 
-                const value = Number(match[0]);
+                const value = Number(this.normalizeOcrNumberToken(match[0]));
+
+                if (!Number.isFinite(value)) return;
 
                 if (readings.some(reading => (
                     reading.type === type &&
@@ -1130,17 +1207,29 @@ const App = {
                 lines[index + 1] || ""
             ].join(" ");
 
-            const match = nearbyText.match(/\b\d{2,3}\b/);
+            const match = nearbyText.match(/\b[0-9OQILSB]{2,3}\b/);
 
             if (match) {
 
-                return Number(match[0]);
+                return Number(this.normalizeOcrNumberToken(match[0]));
 
             }
 
         }
 
         return null;
+
+    },
+
+    normalizeOcrNumberToken(value) {
+
+        return String(value || "")
+            .toUpperCase()
+            .replace(/[OQ]/g, "0")
+            .replace(/[IL]/g, "1")
+            .replace(/S/g, "5")
+            .replace(/B/g, "8")
+            .replace(/\D/g, "");
 
     },
 
