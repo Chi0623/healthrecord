@@ -541,7 +541,8 @@ const ChartPage = {
             this.summaryFields.todayDia,
             this.summaryFields.todayPulse,
             summary.today.sys,
-            summary.today.dia
+            summary.today.dia,
+            summary.today.pulse
         );
 
         this.setMetricField(this.summaryFields.weekSys, summary.week.sys, "本週平均收縮壓");
@@ -552,7 +553,8 @@ const ChartPage = {
             this.summaryFields.weekDia,
             this.summaryFields.weekPulse,
             summary.week.sys,
-            summary.week.dia
+            summary.week.dia,
+            summary.week.pulse
         );
 
         this.setMetricField(this.summaryFields.monthSys, summary.month.sys, "本月平均收縮壓");
@@ -563,7 +565,8 @@ const ChartPage = {
             this.summaryFields.monthDia,
             this.summaryFields.monthPulse,
             summary.month.sys,
-            summary.month.dia
+            summary.month.dia,
+            summary.month.pulse
         );
 
     },
@@ -583,7 +586,8 @@ const ChartPage = {
             this.statFields.maxDia,
             this.statFields.maxPulse,
             stats.maxSys,
-            stats.maxDia
+            stats.maxDia,
+            stats.maxPulse
         );
 
         this.markBloodPressureMetricPair(
@@ -591,7 +595,8 @@ const ChartPage = {
             this.statFields.minDia,
             this.statFields.minPulse,
             stats.minSys,
-            stats.minDia
+            stats.minDia,
+            stats.minPulse
         );
 
     },
@@ -1031,7 +1036,7 @@ const ChartPage = {
 
             if (this.summaryFields[key]) {
 
-                this.summaryFields[key].classList.remove("is-caution-reading");
+                this.summaryFields[key].classList.remove("is-alert-value");
 
             }
 
@@ -1053,7 +1058,7 @@ const ChartPage = {
 
             if (this.statFields[key]) {
 
-                this.statFields[key].classList.remove("is-caution-reading");
+                this.statFields[key].classList.remove("is-alert-value");
 
             }
 
@@ -1106,18 +1111,30 @@ const ChartPage = {
 
     },
 
-    markBloodPressureMetricPair(sysElement, diaElement, pulseElement, sys, dia) {
+    markBloodPressureMetricPair(sysElement, diaElement, pulseElement, sys, dia, pulse) {
 
-        const statusKey = this.getStatusKey(sys, dia);
-        const isCautionReading = statusKey === "caution" || statusKey === "high";
+        if (sysElement) {
 
-        [sysElement, diaElement, pulseElement].forEach(element => {
+            sysElement.classList.toggle("is-alert-value", Number(sys) >= 140);
 
-            if (!element) return;
+        }
 
-            element.classList.toggle("is-caution-reading", isCautionReading);
+        if (diaElement) {
 
-        });
+            diaElement.classList.toggle("is-alert-value", Number(dia) >= 90);
+
+        }
+
+        if (pulseElement) {
+
+            const pulseValue = Number(pulse);
+
+            pulseElement.classList.toggle(
+                "is-alert-value",
+                pulseValue < 50 || pulseValue > 100
+            );
+
+        }
 
     },
 

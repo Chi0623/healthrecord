@@ -543,12 +543,6 @@ const History = {
 
         const period = this.getDayPeriod(dateValue);
 
-        if (status.className === "is-caution" || status.className === "is-high") {
-
-            card.classList.add("is-caution-reading");
-
-        }
-
         const header = document.createElement("div");
 
         header.className = "history-card-header";
@@ -603,13 +597,15 @@ const History = {
         metrics.appendChild(this.createMetric(
             "收縮壓",
             String(record.sys),
-            "history-metric-sys"
+            "history-metric-sys",
+            Number(record.sys) >= 140
         ));
 
         metrics.appendChild(this.createMetric(
             "舒張壓",
             String(record.dia),
-            "history-metric-dia"
+            "history-metric-dia",
+            Number(record.dia) >= 90
         ));
 
         metrics.appendChild(this.createPulseMetric(record));
@@ -681,7 +677,7 @@ const History = {
 
     },
 
-    createMetric(label, value, extraClass = "") {
+    createMetric(label, value, extraClass = "", isAlert = false) {
 
         const metric = document.createElement("div");
 
@@ -693,6 +689,8 @@ const History = {
         const metricValue = document.createElement("div");
 
         metricValue.className = "history-metric-value";
+
+        metricValue.classList.toggle("is-alert-value", isAlert);
 
         metricValue.textContent = value;
 
@@ -712,6 +710,11 @@ const History = {
         const metricValue = document.createElement("div");
 
         metricValue.className = "history-metric-value";
+
+        metricValue.classList.toggle(
+            "is-alert-value",
+            Number(record.pulse) < 50 || Number(record.pulse) > 100
+        );
 
         metricValue.textContent = String(record.pulse);
 

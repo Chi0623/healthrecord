@@ -29,11 +29,15 @@ const App = {
 
         toastTimer: null,
 
+        codeGsSource: "",
+
         userOptions: []
     
     },
 
     localUserOptionsKey: "bp-user-options",
+
+    themeKey: "bp-theme",
 
     ocr: {
 
@@ -59,6 +63,8 @@ const App = {
 
         this.cacheElements();
 
+        this.applySavedTheme();
+
         // 初始化按鈕文字
         this.setSaveButtonLabel("儲存紀錄");
 
@@ -74,17 +80,29 @@ const App = {
     
         this.updateClock();
     
-        this.focusFirstInput();
-    
         setInterval(() => {
     
             this.updateClock();
     
         }, 60000);
 
-        this.loadToday();
+        if (this.hasApiUrl()) {
 
-        this.loadUserOptions();
+            this.focusFirstInput();
+
+            this.loadToday();
+
+            this.loadUserOptions();
+
+        } else {
+
+            this.state.userOptions = this.getMergedUserOptions();
+
+            this.renderUserOptions();
+
+            this.openInitialSetup();
+
+        }
     
     },
 
@@ -276,6 +294,18 @@ const App = {
 
             settingsSaveBtn: document.getElementById("settingsSaveBtn"),
 
+            settingsConnectionDetails: document.getElementById("settingsConnectionDetails"),
+
+            themeButtons: document.querySelectorAll(".theme-option-btn"),
+
+            openSetupGuideBtn: document.getElementById("openSetupGuideBtn"),
+
+            closeSetupGuideBtn: document.getElementById("closeSetupGuideBtn"),
+
+            copyCodeGsBtn: document.getElementById("copyCodeGsBtn"),
+
+            codeGsStatus: document.getElementById("codeGsStatus"),
+
             tabs: document.querySelectorAll(".tab"),
 
             pages: document.querySelectorAll(".page"),
@@ -367,6 +397,95 @@ const App = {
                 this.promptAddUser();
 
             });
+
+        }
+
+        if (this.elements.openSetupGuideBtn) {
+
+            this.elements.openSetupGuideBtn.addEventListener("click", async () => {
+
+                await this.switchPage("setup-guide");
+
+            });
+
+        }
+
+        if (this.elements.closeSetupGuideBtn) {
+
+            this.elements.closeSetupGuideBtn.addEventListener("click", async () => {
+
+                await this.switchPage("settings");
+
+            });
+
+        }
+
+        if (this.elements.copyCodeGsBtn) {
+
+            this.elements.copyCodeGsBtn.addEventListener("click", async () => {
+
+                await this.copyCodeGs();
+
+            });
+
+        }
+
+        this.elements.themeButtons.forEach(button => {
+
+            button.addEventListener("click", () => {
+
+                this.setTheme(button.dataset.themeValue);
+
+            });
+
+        });
+
+    },
+
+    applySavedTheme() {
+
+        const savedTheme = localStorage.getItem(this.themeKey);
+
+        this.applyTheme(savedTheme === "dark" ? "dark" : "light");
+
+    },
+
+    setTheme(theme) {
+
+        const nextTheme = theme === "dark" ? "dark" : "light";
+
+        localStorage.setItem(this.themeKey, nextTheme);
+
+        this.applyTheme(nextTheme);
+
+        this.showToast(
+            nextTheme === "dark" ? "已切換深色模式" : "已切換淺色模式"
+        );
+
+    },
+
+    applyTheme(theme) {
+
+        document.documentElement.dataset.theme = theme;
+
+        this.elements.themeButtons.forEach(button => {
+
+            const isActive = button.dataset.themeValue === theme;
+
+            button.classList.toggle("active", isActive);
+
+            button.setAttribute("aria-pressed", isActive ? "true" : "false");
+
+        });
+
+        const themeMeta = document.querySelector('meta[name="theme-color"]');
+
+        if (themeMeta) {
+
+            themeMeta.setAttribute(
+                "content",
+                theme === "dark" ? "#000000" : "#F5F5F7"
+            );
 
         }
 
@@ -1319,6 +1438,42 @@ const App = {
 
     },
 
+    hasApiUrl() {
+
+        return Boolean(
+            typeof getApiUrl === "function" &&
+            String(getApiUrl() || "").trim()
+        );
+
+    },
+
+    openInitialSetup() {
+
+        requestAnimationFrame(async () => {
+
+            await this.switchPage("settings");
+
+            if (this.elements.settingsConnectionDetails) {
+
+                this.elements.settingsConnectionDetails.open = true;
+
+            }
+
+            if (this.elements.settingsApiUrl) {
+
+                this.elements.settingsApiUrl.focus();
+
+            }
+
+            this.showToast(
+                "請先設定 Apps Script 網址",
+                "info"
+            );
+
+        });
+
+    },
+
     async loadUserOptions(showToast = false) {
 
         if (!this.elements.settingsUserOptions) {
@@ -1835,13 +1990,15 @@ const App = {
     
         }
     
+        const activeTabPage = page === "setup-guide" ? "settings" : page;
+
         this.elements.tabs.forEach(tab => {
     
             tab.classList.toggle(
     
                 "active",
     
-                tab.dataset.page === page
+                tab.dataset.page === activeTabPage
     
             );
     
@@ -1868,6 +2025,14 @@ const App = {
                 }
     
                 break;
+
+            case "setup-guide":
+
+                await this.loadCodeGsSource();
+
+                window.scrollTo(0, 0);
+
+                break;
     
             default:
     
@@ -1875,6 +2040,105 @@ const App = {
     
         }
     
+    },
+
+    async loadCodeGsSource() {
+
+        if (!this.elements.copyCodeGsBtn) return;
+
+        if (this.state.codeGsSource.trim()) return;
+
+        this.elements.copyCodeGsBtn.disabled = true;
+
+        this.elements.codeGsStatus.textContent = "正在載入 Code.gs…";
+
+        try {
+
+            const response = await fetch("Code.gs", { cache: "no-store" });
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const source = await response.text();
+
+            if (!source.includes("function doPost") || !source.includes("SHEET_HEADERS")) {
+
+                throw new Error("Code.gs 內容不正確");
+
+            }
+
+            this.state.codeGsSource = source;
+
+            this.elements.copyCodeGsBtn.disabled = false;
+
+            this.elements.codeGsStatus.textContent = "已載入專案最新版 Code.gs";
+
+        } catch (error) {
+
+            console.error(error);
+
+            this.elements.codeGsStatus.textContent =
+                "目前無法載入 Code.gs，請確認網站已包含專案根目錄的 Code.gs 檔案。";
+
+        }
+
+    },
+
+    async copyCodeGs() {
+
+        const source = this.state.codeGsSource;
+
+        if (!source.trim()) {
+
+            this.showToast("Code.gs 尚未載入", "error");
+
+            return;
+
+        }
+
+        try {
+
+            if (navigator.clipboard && window.isSecureContext) {
+
+                await navigator.clipboard.writeText(source);
+
+            } else {
+
+                this.copyTextFallback(source);
+
+            }
+
+            this.showToast("已複製完整 Code.gs");
+
+        } catch (error) {
+
+            console.error(error);
+
+            this.showToast("複製失敗，請再按一次", "error");
+
+        }
+
+    },
+
+    copyTextFallback(text) {
+
+        const textarea = document.createElement("textarea");
+
+        textarea.value = text;
+
+        textarea.setAttribute("readonly", "");
+
+        textarea.className = "sr-only";
+
+        document.body.appendChild(textarea);
+
+        textarea.select();
+
+        const copied = document.execCommand("copy");
+
+        textarea.remove();
+
+        if (!copied) throw new Error("瀏覽器不支援複製");
+
     },
         /* ==========================================
        Validation
@@ -2299,12 +2563,20 @@ const App = {
         this.renderTodayTime(record.datetime);
 
         this.elements.todaySys.textContent = String(record.sys);
+        this.elements.todaySys.classList.toggle(
+            "is-alert-value",
+            Number(record.sys) >= 140
+        );
         this.elements.todaySys.parentElement.setAttribute(
             "aria-label",
             `收縮壓 ${record.sys}`
         );
 
         this.elements.todayDia.textContent = String(record.dia);
+        this.elements.todayDia.classList.toggle(
+            "is-alert-value",
+            Number(record.dia) >= 90
+        );
         this.elements.todayDia.parentElement.setAttribute(
             "aria-label",
             `舒張壓 ${record.dia}`
@@ -2316,22 +2588,26 @@ const App = {
             record.ihb
         );
 
+        this.elements.todayPulse.classList.toggle(
+            "is-alert-value",
+            Number(record.pulse) < 50 || Number(record.pulse) > 100
+        );
+
         this.elements.todayStatus.textContent = status.label;
 
         this.elements.todayStatus.className =
             `today-status ${status.className}`;
-
-        this.elements.todayCard.classList.toggle(
-            "is-caution-reading",
-            status.className === "is-caution" || status.className === "is-high"
-        );
 
     },
 
     renderTodayEmpty() {
 
         this.elements.todayCard.classList.add("is-empty");
-        this.elements.todayCard.classList.remove("is-caution-reading");
+        [
+            this.elements.todaySys,
+            this.elements.todayDia,
+            this.elements.todayPulse
+        ].forEach(element => element.classList.remove("is-alert-value"));
 
         this.renderGreeting();
 
