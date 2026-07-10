@@ -324,6 +324,46 @@ async function getUsers() {
 
 }
 
+async function getOcrTemplate(user) {
+
+    return await apiRequest(
+        "getOcrTemplate",
+        {
+            user
+        }
+    );
+
+}
+
+async function saveOcrTemplate(user, template) {
+
+    const fields = template.fields || template;
+
+    return await apiRequest(
+        "saveOcrTemplate",
+        {
+            user,
+            version: template.version || 1,
+            lcd: template.lcd ? JSON.stringify(template.lcd) : "",
+            sys: JSON.stringify(fields.sys),
+            dia: JSON.stringify(fields.dia),
+            pulse: JSON.stringify(fields.pulse)
+        }
+    );
+
+}
+
+async function deleteOcrTemplate(user) {
+
+    return await apiRequest(
+        "deleteOcrTemplate",
+        {
+            user
+        }
+    );
+
+}
+
 /* ==========================================================
    趨勢
 ========================================================== */
