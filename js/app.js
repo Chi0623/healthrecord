@@ -603,6 +603,7 @@ const App = {
 
             }
 
+            this.setOcrModeActive(true);
             this.showOcrCameraPanel();
             this.setOcrStatus("請對準血壓計螢幕後按拍下辨識");
 
@@ -619,6 +620,8 @@ const App = {
     },
 
     showOcrCameraPanel() {
+
+        this.setOcrModeActive(true);
 
         if (this.elements.ocrCameraPanel) {
 
@@ -652,6 +655,7 @@ const App = {
         if (!this.ocr.recognizing) {
 
             this.setOcrStatus("");
+            this.setOcrModeActive(false);
 
         }
 
@@ -704,23 +708,36 @@ const App = {
 
         try {
 
-            const image = await this.prepareOcrImage(source);
+            const images = await this.prepareOcrImages(source);
+            let values = null;
 
-            const result = await Tesseract.recognize(
-                image,
-                "eng",
-                {
-                    logger: progress => this.updateOcrProgress(progress)
+            for (const image of images) {
+
+                const result = await Tesseract.recognize(
+                    image,
+                    "eng",
+                    {
+                        logger: progress => this.updateOcrProgress(progress),
+                        tessedit_char_whitelist:
+                            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz血壓压收縮缩舒張张脈脉搏拍心率高低/: "
+                    }
+                );
+
+                values = this.extractBloodPressureValues(
+                    result && result.data ? result.data.text : ""
+                );
+
+                if (values) {
+
+                    break;
+
                 }
-            );
 
-            const values = this.extractBloodPressureValues(
-                result && result.data ? result.data.text : ""
-            );
+            }
 
             if (!values) {
 
-                this.setOcrStatus("沒有辨識到完整數字，請重拍或手動輸入");
+                this.setOcrStatus("沒有辨識到完整數字，請重拍或清除照片後手動輸入");
                 this.showToast("請重拍或手動輸入");
 
                 return;
@@ -771,6 +788,7 @@ const App = {
         }
 
         this.elements.ocrPreviewWrap.hidden = false;
+        this.setOcrModeActive(true);
 
     },
 
@@ -798,6 +816,19 @@ const App = {
         }
 
         this.setOcrStatus("");
+        this.setOcrModeActive(false);
+
+    },
+
+    setOcrModeActive(active) {
+
+        const homePage = document.getElementById("page-home");
+
+        if (homePage) {
+
+            homePage.classList.toggle("is-ocr-active", Boolean(active));
+
+        }
 
     },
 
@@ -837,7 +868,7 @@ const App = {
 
     },
 
-    async prepareOcrImage(source) {
+    async prepareOcrImages(source) {
 
         const bitmap =
             source instanceof HTMLCanvasElement
@@ -853,8 +884,23 @@ const App = {
         canvas.width = Math.max(1, Math.round(bitmap.width * scale));
         canvas.height = Math.max(1, Math.round(bitmap.height * scale));
 
+        return [
+            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "contrast"),
+            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "threshold"),
+            this.createOcrCanvas(bitmap, canvas.width, canvas.height, "grayscale")
+        ];
+
+    },
+
+    createOcrCanvas(bitmap, width, height, mode) {
+
+        const canvas = document.createElement("canvas");
+
+        canvas.width = width;
+        canvas.height = height;
+
         const ctx = canvas.getContext("2d", { willReadFrequently: true });
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        ctx.drawImage(bitmap, 0, 0, width, height);
 
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const data = imageData.data;
@@ -866,11 +912,32 @@ const App = {
                 data[i + 1] * 0.587 +
                 data[i + 2] * 0.114;
 
-            const contrast = gray > 128 ? 255 : 0;
+            if (mode === "threshold") {
 
-            data[i] = contrast;
-            data[i + 1] = contrast;
-            data[i + 2] = contrast;
+                const contrast = gray > 120 ? 255 : 0;
+
+                data[i] = contrast;
+                data[i + 1] = contrast;
+                data[i + 2] = contrast;
+
+            } else if (mode === "contrast") {
+
+                const contrast = Math.max(
+                    0,
+                    Math.min(255, (gray - 96) * 2.2)
+                );
+
+                data[i] = contrast;
+                data[i + 1] = contrast;
+                data[i + 2] = contrast;
+
+            } else {
+
+                data[i] = gray;
+                data[i + 1] = gray;
+                data[i + 2] = gray;
+
+            }
 
         }
 
@@ -937,6 +1004,7 @@ const App = {
 
         const sys = sysReadings.find(value => value >= 50 && value <= 280) ||
             numbers.find(value => value >= 50 && value <= 280);
+        const sysIndex = numbers.findIndex(value => value === sys);
 
         const dia = diaReadings.find(value => (
             value >= 30 &&
@@ -946,16 +1014,25 @@ const App = {
             value >= 30 &&
             value <= 180 &&
             value < sys
-        )) || numbers.find(value => value >= 30 && value <= 180 && value < sys);
+        )) || numbers.find((value, index) => (
+            index !== sysIndex &&
+            value >= 30 &&
+            value <= 180 &&
+            value < sys
+        ));
+        const diaIndex = numbers.findIndex((value, index) => (
+            index !== sysIndex &&
+            value === dia
+        ));
 
         const pulse = pulseReadings.find(value => (
             value >= 30 &&
             value <= 220
-        )) || numbers.find(value => (
+        )) || numbers.find((value, index) => (
+            index !== sysIndex &&
+            index !== diaIndex &&
             value >= 30 &&
-            value <= 220 &&
-            value !== sys &&
-            value !== dia
+            value <= 220
         ));
 
         if (!this.isOcrBloodPressureValid(sys, dia, pulse)) {
@@ -975,8 +1052,8 @@ const App = {
     findOcrLabeledReadings(text) {
 
         const patterns = {
-            sys: /\b(SYS|SYSTOLIC|SIS)\b|最高\s*血[壓压]|收縮\s*[壓压]|收缩\s*[壓压]|高\s*[壓压]/,
-            dia: /\b(DIA|DIASTOLIC)\b|最低\s*血[壓压]|舒張\s*[壓压]|舒张\s*[壓压]|低\s*[壓压]/,
+            sys: /\b(SYS|SYSTOLIC|SIS)\b|最高\s*血[壓压圧]|收縮\s*[壓压圧]|收缩\s*[壓压圧]|高\s*[壓压圧]/,
+            dia: /\b(DIA|DIASTOLIC)\b|最低\s*血[壓压圧]|舒張\s*[壓压圧]|舒张\s*[壓压圧]|低\s*[壓压圧]/,
             pulse: /\b(PUL|PULSE|PR|BPM)\b|脈拍|脉拍|脈搏|脉搏|心跳|心率/
         };
         const lines = String(text || "")
@@ -1091,6 +1168,7 @@ const App = {
         this.elements.pulse.value = String(values.pulse);
 
         this.clearErrors();
+        this.setOcrModeActive(false);
         this.setOcrStatus(
             `已填入 ${values.sys} / ${values.dia}，脈搏 ${values.pulse}`
         );

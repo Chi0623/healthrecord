@@ -590,6 +590,18 @@ body{
 
 }
 
+#page-home.is-ocr-active .bp-card{
+
+    display:none;
+
+}
+
+#page-home.is-ocr-active .ocr-card{
+
+    margin-top:0;
+
+}
+
 .home-action-row{
 
     display:grid;
@@ -816,6 +828,22 @@ body{
     border-radius:14px;
 
     background:rgba(142,142,147,.12);
+
+}
+
+#page-home.is-ocr-active .ocr-preview-wrap{
+
+    grid-template-columns:1fr;
+
+}
+
+#page-home.is-ocr-active .ocr-preview{
+
+    width:100%;
+
+    height:auto;
+
+    aspect-ratio:4 / 3;
 
 }
 
