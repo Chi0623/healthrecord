@@ -2854,6 +2854,8 @@ body.is-keyboard-open .tabbar{
 
     display:flex;
 
+    flex-wrap:wrap;
+
     gap:8px;
 
 }
@@ -2914,6 +2916,14 @@ body.is-keyboard-open .tabbar{
     font-weight:700;
 
     cursor:pointer;
+
+}
+
+.settings-secondary-btn.active{
+
+    background:rgba(0,122,255,.12);
+
+    color:var(--primary);
 
 }
 

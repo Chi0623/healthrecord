@@ -51,9 +51,19 @@ const App = {
 
         templateStep: "sys",
 
+        templateLcdCandidates: [],
+
+        templateLcdDetection: null,
+
+        templateLcdConfirmPending: false,
+
+        templateDebug: false,
+
         templateDragging: false,
 
-        templateDragStart: null
+        templateDragStart: null,
+
+        templateDragHandle: null
 
     },
 
@@ -307,6 +317,8 @@ const App = {
 
             ocrTemplateCaptureBtn: document.getElementById("ocrTemplateCaptureBtn"),
 
+            ocrTemplateDebugBtn: document.getElementById("ocrTemplateDebugBtn"),
+
             ocrTemplateCancelBtn: document.getElementById("ocrTemplateCancelBtn"),
 
             ocrTemplateSteps: document.querySelectorAll(".ocr-template-step"),
@@ -471,7 +483,17 @@ const App = {
 
             this.elements.ocrTemplateCaptureBtn.addEventListener("click", () => {
 
-                this.captureOcrTemplateImage();
+                this.handleOcrTemplatePrimaryAction();
+
+            });
+
+        }
+
+        if (this.elements.ocrTemplateDebugBtn) {
+
+            this.elements.ocrTemplateDebugBtn.addEventListener("click", () => {
+
+                this.toggleOcrTemplateDebug();
 
             });
 
@@ -891,6 +913,11 @@ const App = {
         this.ocr.templateRects = {};
         this.ocr.templateStep = "lcd";
         this.ocr.templateImage = null;
+        this.ocr.templateLcdCandidates = [];
+        this.ocr.templateLcdDetection = null;
+        this.ocr.templateLcdConfirmPending = false;
+        this.ocr.templateDragHandle = null;
+        this.setOcrTemplatePrimaryLabel("拍下");
         this.updateOcrTemplateHint();
         this.syncOcrTemplateSteps();
 
@@ -938,6 +965,55 @@ const App = {
 
     },
 
+    handleOcrTemplatePrimaryAction() {
+
+        if (
+            this.ocr.templateImage &&
+            this.ocr.templateStep === "lcd" &&
+            this.ocr.templateLcdConfirmPending
+        ) {
+
+            this.confirmDetectedLcd();
+
+            return;
+
+        }
+
+        this.captureOcrTemplateImage();
+
+    },
+
+    setOcrTemplatePrimaryLabel(label) {
+
+        if (this.elements.ocrTemplateCaptureBtn) {
+
+            this.elements.ocrTemplateCaptureBtn.textContent = label;
+
+        }
+
+    },
+
+    toggleOcrTemplateDebug() {
+
+        this.ocr.templateDebug = !this.ocr.templateDebug;
+
+        if (this.elements.ocrTemplateDebugBtn) {
+
+            this.elements.ocrTemplateDebugBtn.classList.toggle(
+                "active",
+                this.ocr.templateDebug
+            );
+            this.elements.ocrTemplateDebugBtn.setAttribute(
+                "aria-pressed",
+                String(this.ocr.templateDebug)
+            );
+
+        }
+
+        this.drawOcrTemplateCanvas();
+
+    },
+
     captureOcrTemplateImage() {
 
         const video = this.elements.ocrTemplateVideo;
@@ -962,15 +1038,347 @@ const App = {
         image.onload = () => {
 
             this.ocr.templateImage = image;
+            this.ocr.templateLcdCandidates = [];
+            this.ocr.templateLcdDetection = null;
+            this.ocr.templateLcdConfirmPending = false;
+            this.ocr.templateDragHandle = null;
             this.stopOcrTemplateCamera();
             video.hidden = true;
             canvas.hidden = false;
+            this.detectOcrTemplateLcd();
             this.drawOcrTemplateCanvas();
             this.updateOcrTemplateHint();
 
         };
 
         image.src = canvas.toDataURL("image/jpeg", .92);
+
+    },
+
+    detectOcrTemplateLcd() {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!canvas || !this.ocr.templateImage) return;
+
+        const analysis = this.findLcdCandidates(canvas);
+        const best = analysis.candidates[0] || null;
+
+        this.ocr.templateLcdCandidates = analysis.candidates;
+        this.ocr.templateLcdDetection = {
+            best,
+            rejected: analysis.rejected
+        };
+
+        if (best && best.score >= .72) {
+
+            this.ocr.templateRects.lcd = best.rect;
+            this.ocr.templateLcdConfirmPending = true;
+            this.setOcrTemplatePrimaryLabel("確認");
+
+            return;
+
+        }
+
+        if (best && best.score >= .48) {
+
+            this.ocr.templateRects.lcd = best.rect;
+            this.ocr.templateLcdConfirmPending = true;
+            this.setOcrTemplatePrimaryLabel("確認");
+
+            return;
+
+        }
+
+        delete this.ocr.templateRects.lcd;
+        this.ocr.templateLcdConfirmPending = false;
+        this.setOcrTemplatePrimaryLabel("拍下");
+
+    },
+
+    findLcdCandidates(sourceCanvas) {
+
+        const sampleWidth = 240;
+        const sampleHeight = Math.max(
+            120,
+            Math.round(sourceCanvas.height * sampleWidth / sourceCanvas.width)
+        );
+        const sampleCanvas = document.createElement("canvas");
+        sampleCanvas.width = sampleWidth;
+        sampleCanvas.height = sampleHeight;
+
+        const ctx = sampleCanvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(sourceCanvas, 0, 0, sampleWidth, sampleHeight);
+
+        const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = imageData.data;
+        const pixels = sampleWidth * sampleHeight;
+        const mask = new Uint8Array(pixels);
+        const edge = new Uint8Array(pixels);
+        const gray = new Uint8Array(pixels);
+
+        for (let i = 0; i < pixels; i += 1) {
+
+            const offset = i * 4;
+            const r = data[offset];
+            const g = data[offset + 1];
+            const b = data[offset + 2];
+            const max = Math.max(r, g, b);
+            const min = Math.min(r, g, b);
+            const sat = max === 0 ? 0 : (max - min) / max;
+            const value = max / 255;
+            const labLikeGreen =
+                g >= r - 16 &&
+                g >= b - 8 &&
+                value >= .18 &&
+                value <= .78;
+            const mutedLcd =
+                sat <= .34 &&
+                value >= .20 &&
+                value <= .74 &&
+                labLikeGreen;
+            const neutralScreen =
+                sat <= .20 &&
+                value >= .24 &&
+                value <= .70;
+
+            gray[i] = Math.round(r * .299 + g * .587 + b * .114);
+            mask[i] = mutedLcd || neutralScreen ? 1 : 0;
+
+        }
+
+        for (let y = 1; y < sampleHeight - 1; y += 1) {
+
+            for (let x = 1; x < sampleWidth - 1; x += 1) {
+
+                const i = y * sampleWidth + x;
+                const gx =
+                    -gray[i - sampleWidth - 1] +
+                    gray[i - sampleWidth + 1] -
+                    2 * gray[i - 1] +
+                    2 * gray[i + 1] -
+                    gray[i + sampleWidth - 1] +
+                    gray[i + sampleWidth + 1];
+                const gy =
+                    -gray[i - sampleWidth - 1] -
+                    2 * gray[i - sampleWidth] -
+                    gray[i - sampleWidth + 1] +
+                    gray[i + sampleWidth - 1] +
+                    2 * gray[i + sampleWidth] +
+                    gray[i + sampleWidth + 1];
+
+                edge[i] = Math.sqrt(gx * gx + gy * gy) > 42 ? 1 : 0;
+
+            }
+
+        }
+
+        const visited = new Uint8Array(pixels);
+        const candidates = [];
+        const rejected = [];
+        const queue = [];
+
+        for (let i = 0; i < pixels; i += 1) {
+
+            if (!mask[i] || visited[i]) continue;
+
+            let minX = sampleWidth;
+            let minY = sampleHeight;
+            let maxX = 0;
+            let maxY = 0;
+            let area = 0;
+            let edgeCount = 0;
+
+            queue.length = 0;
+            queue.push(i);
+            visited[i] = 1;
+
+            for (let q = 0; q < queue.length; q += 1) {
+
+                const current = queue[q];
+                const x = current % sampleWidth;
+                const y = Math.floor(current / sampleWidth);
+
+                minX = Math.min(minX, x);
+                minY = Math.min(minY, y);
+                maxX = Math.max(maxX, x);
+                maxY = Math.max(maxY, y);
+                area += 1;
+                edgeCount += edge[current];
+
+                const neighbors = [
+                    current - 1,
+                    current + 1,
+                    current - sampleWidth,
+                    current + sampleWidth
+                ];
+
+                neighbors.forEach(next => {
+
+                    if (
+                        next < 0 ||
+                        next >= pixels ||
+                        visited[next] ||
+                        !mask[next]
+                    ) return;
+
+                    const nx = next % sampleWidth;
+
+                    if (Math.abs(nx - x) > 1) return;
+
+                    visited[next] = 1;
+                    queue.push(next);
+
+                });
+
+            }
+
+            const candidate = this.scoreLcdCandidate({
+                minX,
+                minY,
+                maxX,
+                maxY,
+                area,
+                edgeCount
+            }, sampleWidth, sampleHeight);
+
+            if (candidate.accepted) {
+
+                candidates.push(candidate);
+
+            } else {
+
+                rejected.push(candidate);
+
+            }
+
+        }
+
+        candidates.sort((a, b) => b.score - a.score);
+        rejected.sort((a, b) => b.score - a.score);
+
+        return {
+            candidates: candidates.slice(0, 8),
+            rejected: rejected.slice(0, 12)
+        };
+
+    },
+
+    scoreLcdCandidate(raw, width, height) {
+
+        const boxWidth = raw.maxX - raw.minX + 1;
+        const boxHeight = raw.maxY - raw.minY + 1;
+        const boxArea = boxWidth * boxHeight;
+        const imageArea = width * height;
+        const fillRatio = raw.area / Math.max(1, boxArea);
+        const areaRatio = boxArea / imageArea;
+        const aspect = boxWidth / Math.max(1, boxHeight);
+        const centerX = (raw.minX + raw.maxX) / 2 / width;
+        const centerY = (raw.minY + raw.maxY) / 2 / height;
+        const edgeDensity = raw.edgeCount / Math.max(1, raw.area);
+        const rectScore = this.scoreRange(fillRatio, .55, .98);
+        const areaScore = this.scoreRange(areaRatio, .04, .48);
+        const aspectScore = this.scoreSoftRange(aspect, 1.05, 3.9, 1.65, 2.8);
+        const positionScore =
+            this.scoreSoftRange(centerX, .12, .88, .25, .75) * .55 +
+            this.scoreSoftRange(centerY, .10, .86, .20, .68) * .45;
+        const edgeScore = this.scoreSoftRange(edgeDensity, .015, .36, .035, .20);
+        const quadrilateralScore = this.scoreRectangularEdges(raw, width, height);
+        const score =
+            rectScore * .20 +
+            areaScore * .18 +
+            aspectScore * .20 +
+            positionScore * .14 +
+            edgeScore * .13 +
+            quadrilateralScore * .15;
+        const reasons = [];
+
+        if (areaRatio < .04) reasons.push("area too small");
+        if (areaRatio > .48) reasons.push("area too large");
+        if (aspect < 1.05) reasons.push("aspect too narrow");
+        if (aspect > 3.9) reasons.push("aspect too wide");
+        if (fillRatio < .55) reasons.push("low rectangular fill");
+        if (centerY < .10 || centerY > .86) reasons.push("position unlikely");
+        if (edgeDensity < .015) reasons.push("weak edge");
+        if (score < .30) reasons.push("low confidence");
+
+        return {
+            score,
+            accepted: score >= .30 && reasons.length < 3,
+            reasons,
+            rect: {
+                x: raw.minX / width,
+                y: raw.minY / height,
+                width: boxWidth / width,
+                height: boxHeight / height
+            },
+            metrics: {
+                areaRatio,
+                aspect,
+                fillRatio,
+                edgeDensity,
+                rectangularity: quadrilateralScore,
+                centerX,
+                centerY
+            }
+        };
+
+    },
+
+    scoreRectangularEdges(raw, width, height) {
+
+        const marginX = Math.min(raw.minX, width - raw.maxX);
+        const marginY = Math.min(raw.minY, height - raw.maxY);
+        const hasReasonableMargins = marginX >= 1 && marginY >= 1;
+        const boxWidth = raw.maxX - raw.minX + 1;
+        const boxHeight = raw.maxY - raw.minY + 1;
+        const compactness = Math.min(boxWidth, boxHeight) / Math.max(boxWidth, boxHeight);
+
+        return Math.max(
+            0,
+            Math.min(
+                1,
+                (hasReasonableMargins ? .68 : .45) + compactness * .32
+            )
+        );
+
+    },
+
+    scoreRange(value, min, max) {
+
+        return value >= min && value <= max ? 1 : 0;
+
+    },
+
+    scoreSoftRange(value, outerMin, outerMax, innerMin, innerMax) {
+
+        if (value >= innerMin && value <= innerMax) return 1;
+        if (value < outerMin || value > outerMax) return 0;
+        if (value < innerMin) {
+
+            return (value - outerMin) / Math.max(.0001, innerMin - outerMin);
+
+        }
+
+        return (outerMax - value) / Math.max(.0001, outerMax - innerMax);
+
+    },
+
+    async confirmDetectedLcd() {
+
+        const rect = this.ocr.templateRects.lcd;
+
+        if (!rect || rect.width < .02 || rect.height < .02) {
+
+            this.showToast("請先確認 LCD 螢幕範圍");
+
+            return;
+
+        }
+
+        this.ocr.templateLcdConfirmPending = false;
+        this.setOcrTemplatePrimaryLabel("拍下");
+        await this.advanceOcrTemplateStep();
 
     },
 
@@ -1025,6 +1433,9 @@ const App = {
         this.elements.ocrTemplateCanvas.setPointerCapture(event.pointerId);
         this.ocr.templateDragging = true;
         this.ocr.templateDragStart = this.getOcrTemplatePointer(event);
+        this.ocr.templateDragHandle = this.getOcrTemplateDragHandle(
+            this.ocr.templateDragStart
+        );
 
     },
 
@@ -1034,8 +1445,19 @@ const App = {
 
         const point = this.getOcrTemplatePointer(event);
 
-        this.ocr.templateRects[this.ocr.templateStep] =
-            this.createNormalizedRect(this.ocr.templateDragStart, point);
+        if (this.ocr.templateDragHandle) {
+
+            this.updateOcrTemplateRectHandle(
+                this.ocr.templateDragHandle,
+                point
+            );
+
+        } else {
+
+            this.ocr.templateRects[this.ocr.templateStep] =
+                this.createNormalizedRect(this.ocr.templateDragStart, point);
+
+        }
 
         this.drawOcrTemplateCanvas();
 
@@ -1048,7 +1470,108 @@ const App = {
         this.moveOcrTemplateDrag(event);
         this.ocr.templateDragging = false;
         this.ocr.templateDragStart = null;
+        this.ocr.templateDragHandle = null;
+
+        if (this.ocr.templateStep === "lcd") {
+
+            this.ocr.templateLcdConfirmPending = true;
+            this.setOcrTemplatePrimaryLabel("確認");
+
+            this.drawOcrTemplateCanvas();
+            this.updateOcrTemplateHint();
+
+            return;
+
+        }
+
         await this.advanceOcrTemplateStep();
+
+    },
+
+    getOcrTemplateDragHandle(point) {
+
+        if (this.ocr.templateStep !== "lcd") return null;
+
+        const rect = this.ocr.templateRects.lcd;
+        const canvas = this.elements.ocrTemplateCanvas;
+
+        if (!rect || !canvas) return null;
+
+        const corners = {
+            nw: {
+                x: rect.x * canvas.width,
+                y: rect.y * canvas.height
+            },
+            ne: {
+                x: (rect.x + rect.width) * canvas.width,
+                y: rect.y * canvas.height
+            },
+            sw: {
+                x: rect.x * canvas.width,
+                y: (rect.y + rect.height) * canvas.height
+            },
+            se: {
+                x: (rect.x + rect.width) * canvas.width,
+                y: (rect.y + rect.height) * canvas.height
+            }
+        };
+        const threshold = Math.max(24, Math.min(canvas.width, canvas.height) * .035);
+        let best = null;
+        let bestDistance = Infinity;
+
+        Object.keys(corners).forEach(key => {
+
+            const corner = corners[key];
+            const distance = Math.hypot(point.x - corner.x, point.y - corner.y);
+
+            if (distance < bestDistance) {
+
+                best = key;
+                bestDistance = distance;
+
+            }
+
+        });
+
+        return bestDistance <= threshold ? best : null;
+
+    },
+
+    updateOcrTemplateRectHandle(handle, point) {
+
+        const canvas = this.elements.ocrTemplateCanvas;
+        const current = this.ocr.templateRects[this.ocr.templateStep];
+
+        if (!canvas || !current) return;
+
+        const left = current.x * canvas.width;
+        const top = current.y * canvas.height;
+        const right = (current.x + current.width) * canvas.width;
+        const bottom = (current.y + current.height) * canvas.height;
+        const next = {
+            left,
+            top,
+            right,
+            bottom
+        };
+
+        if (handle.includes("n")) next.top = point.y;
+        if (handle.includes("s")) next.bottom = point.y;
+        if (handle.includes("w")) next.left = point.x;
+        if (handle.includes("e")) next.right = point.x;
+
+        const normalized = this.createNormalizedRect(
+            {
+                x: next.left,
+                y: next.top
+            },
+            {
+                x: next.right,
+                y: next.bottom
+            }
+        );
+
+        this.ocr.templateRects[this.ocr.templateStep] = normalized;
 
     },
 
@@ -1175,6 +1698,12 @@ const App = {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.drawImage(this.ocr.templateImage, 0, 0, canvas.width, canvas.height);
 
+        if (this.ocr.templateDebug) {
+
+            this.drawOcrTemplateDebug(ctx, canvas);
+
+        }
+
         Object.keys(this.ocr.templateRects).forEach(key => {
 
             const rect = this.ocr.templateRects[key];
@@ -1193,7 +1722,96 @@ const App = {
             ctx.fillStyle = "rgba(0,122,255,.18)";
             ctx.fillRect(x, y, width, height);
 
+            if (key === "lcd") {
+
+                this.drawOcrTemplateHandles(ctx, x, y, width, height);
+
+            }
+
         });
+
+    },
+
+    drawOcrTemplateDebug(ctx, canvas) {
+
+        const candidates = this.ocr.templateLcdCandidates || [];
+        const rejected = this.ocr.templateLcdDetection
+            ? this.ocr.templateLcdDetection.rejected || []
+            : [];
+
+        candidates.forEach((candidate, index) => {
+
+            this.drawOcrTemplateCandidate(
+                ctx,
+                canvas,
+                candidate,
+                index === 0 ? "#FF9500" : "#5AC8FA",
+                `${index + 1} ${Math.round(candidate.score * 100)}`
+            );
+
+        });
+
+        rejected.slice(0, 6).forEach((candidate, index) => {
+
+            this.drawOcrTemplateCandidate(
+                ctx,
+                canvas,
+                candidate,
+                "rgba(255,59,48,.75)",
+                `x ${Math.round(candidate.score * 100)} ${candidate.reasons.join(", ")}`
+            );
+
+        });
+
+    },
+
+    drawOcrTemplateCandidate(ctx, canvas, candidate, color, label) {
+
+        const rect = candidate.rect;
+        const x = rect.x * canvas.width;
+        const y = rect.y * canvas.height;
+        const width = rect.width * canvas.width;
+        const height = rect.height * canvas.height;
+
+        ctx.save();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = color;
+        ctx.setLineDash([8, 6]);
+        ctx.strokeRect(x, y, width, height);
+        ctx.setLineDash([]);
+        ctx.font = "700 18px system-ui, sans-serif";
+        ctx.fillStyle = "rgba(0,0,0,.72)";
+        ctx.fillRect(x, Math.max(0, y - 26), Math.min(canvas.width - x, 320), 24);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillText(label, x + 6, Math.max(18, y - 8));
+        ctx.restore();
+
+    },
+
+    drawOcrTemplateHandles(ctx, x, y, width, height) {
+
+        const points = [
+            [x, y],
+            [x + width, y],
+            [x, y + height],
+            [x + width, y + height]
+        ];
+
+        ctx.save();
+        ctx.fillStyle = "#FFFFFF";
+        ctx.strokeStyle = "#FF9500";
+        ctx.lineWidth = 3;
+
+        points.forEach(point => {
+
+            ctx.beginPath();
+            ctx.arc(point[0], point[1], 10, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+
+        });
+
+        ctx.restore();
 
     },
 
@@ -1220,11 +1838,42 @@ const App = {
         if (!this.elements.ocrTemplateHint) return;
 
         const labels = {
-            lcd: "請先框選 LCD 螢幕範圍",
+            lcd: "請拍下後確認 LCD 螢幕範圍",
             sys: "請拖曳框選 SYS 數字",
             dia: "請拖曳框選 DIA 數字",
             pulse: "請拖曳框選 Pulse 數字"
         };
+
+        if (
+            this.ocr.templateImage &&
+            this.ocr.templateStep === "lcd" &&
+            this.ocr.templateLcdConfirmPending
+        ) {
+
+            const best = this.ocr.templateLcdDetection
+                ? this.ocr.templateLcdDetection.best
+                : null;
+
+            this.elements.ocrTemplateHint.textContent =
+                best && best.score >= .72
+                    ? "已找到螢幕，請確認"
+                    : "找到可能的螢幕，請拖曳四角微調後確認";
+
+            return;
+
+        }
+
+        if (
+            this.ocr.templateImage &&
+            this.ocr.templateStep === "lcd"
+        ) {
+
+            this.elements.ocrTemplateHint.textContent =
+                "找不到螢幕，請手動框選 LCD 螢幕範圍";
+
+            return;
+
+        }
 
         this.elements.ocrTemplateHint.textContent =
             this.ocr.templateImage
