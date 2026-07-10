@@ -34,6 +34,64 @@ const CHART_DAY_PERIODS = [
 
 ];
 
+const BP_THRESHOLD_ZONE_PLUGIN = {
+    id: "bpThresholdZone",
+    beforeDatasetsDraw(chart) {
+
+        const yScale = chart.scales && chart.scales.y;
+        const chartArea = chart.chartArea;
+
+        if (!yScale || !chartArea) {
+
+            return;
+
+        }
+
+        const ctx = chart.ctx;
+        const top = chartArea.top;
+        const bottom = chartArea.bottom;
+        const left = chartArea.left;
+        const right = chartArea.right;
+        const sysStageTwoY = yScale.getPixelForValue(140);
+        const diaStageTwoY = yScale.getPixelForValue(90);
+
+        ctx.save();
+
+        if (Number.isFinite(sysStageTwoY)) {
+
+            const zoneTop = Math.max(top, Math.min(bottom, sysStageTwoY));
+
+            ctx.fillStyle = "rgba(255, 107, 107, .10)";
+            ctx.fillRect(left, top, right - left, zoneTop - top);
+
+            ctx.strokeStyle = "rgba(255, 59, 48, .58)";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(left, zoneTop);
+            ctx.lineTo(right, zoneTop);
+            ctx.stroke();
+
+        }
+
+        if (Number.isFinite(diaStageTwoY)) {
+
+            const lineY = Math.max(top, Math.min(bottom, diaStageTwoY));
+
+            ctx.strokeStyle = "rgba(255, 59, 48, .42)";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([8, 5]);
+            ctx.beginPath();
+            ctx.moveTo(left, lineY);
+            ctx.lineTo(right, lineY);
+            ctx.stroke();
+
+        }
+
+        ctx.restore();
+
+    }
+};
+
 const ChartPage = {
 
     chart: null,
@@ -705,6 +763,7 @@ const ChartPage = {
 
         this.chart = new Chart(this.canvas, {
             type: "line",
+            plugins: [BP_THRESHOLD_ZONE_PLUGIN],
             data: {
                 labels,
                 datasets: [
@@ -777,7 +836,10 @@ const ChartPage = {
                     },
                     y: {
                         suggestedMin: 40,
-                        suggestedMax: 180
+                        suggestedMax: 180,
+                        grid: {
+                            color: "rgba(148, 163, 184, .22)"
+                        }
                     }
                 }
             }
@@ -1179,7 +1241,7 @@ const ChartPage = {
 
         return {
             ideal: { label: "正常", dotClass: "status-dot-ideal", count: 0 },
-            info: { label: "前期", dotClass: "status-dot-info", count: 0 },
+            info: { label: "偏高", dotClass: "status-dot-info", count: 0 },
             caution: { label: "一期", dotClass: "status-dot-caution", count: 0 },
             high: { label: "二期", dotClass: "status-dot-high", count: 0 }
         };

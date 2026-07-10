@@ -43,7 +43,7 @@
 
     <link
         rel="stylesheet"
-        href="css/style.css?v=20260710-ocr-replace-inputs">
+        href="css/style.css?v=20260710-senior-feedback">
 
 </head>
 
@@ -345,22 +345,12 @@
                 <div class="home-action-row">
 
                     <button
-                        id="ocrCaptureBtn"
-                        class="home-action-btn ocr-capture-btn"
-                        type="button"
-                        aria-label="拍照辨識">
-
-                        <svg class="ocr-capture-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M6.5 7.5 8.2 5h7.6l1.7 2.5H20a2 2 0 0 1 2 2V18a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9.5a2 2 0 0 1 2-2h2.5Z"/><circle cx="12" cy="13.5" r="4"/></svg><span class="sr-only">拍照辨識</span>
-
-                    </button>
-
-                    <button
                         id="saveBtn"
                         class="home-action-btn save-btn"
                         type="button"
                         aria-label="儲存紀錄">
 
-                        <svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5Z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/></svg><span class="sr-only">儲存紀錄</span>
+                        <svg class="save-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3h12l2 2v16H5Z"/><path d="M8 3v6h8V3"/><path d="M8 21v-7h8v7"/></svg><span class="save-btn-label">儲存紀錄</span>
 
                     </button>
 
@@ -617,7 +607,7 @@
                             data-filter-type="status"
                             data-filter-value="info">
 
-                            <span class="status-dot status-dot-info" aria-hidden="true"></span><span>前期</span>
+                            <span class="status-dot status-dot-info" aria-hidden="true"></span><span>偏高</span>
 
                         </button>
 
@@ -1198,7 +1188,7 @@
 
                         <div class="settings-status-rule">
 
-                            SYS ≤ 120 且 DIA ≤ 80
+                            SYS &lt; 120 且 DIA &lt; 80
 
                         </div>
 
@@ -1209,13 +1199,13 @@
                         <div class="settings-status-main">
 
                             <span class="status-dot status-dot-info" aria-hidden="true"></span>
-                            <span class="settings-status-name">前期</span>
+                            <span class="settings-status-name">偏高</span>
 
                         </div>
 
                         <div class="settings-status-rule">
 
-                            SYS &lt; 140 且 DIA &lt; 90
+                            SYS &lt; 130 且 DIA &lt; 80
 
                         </div>
 
@@ -1232,7 +1222,7 @@
 
                         <div class="settings-status-rule">
 
-                            SYS &lt; 160 且 DIA &lt; 100
+                            SYS &lt; 140 且 DIA &lt; 90
 
                         </div>
 
@@ -1249,7 +1239,7 @@
 
                         <div class="settings-status-rule">
 
-                            SYS ≥ 160 或 DIA ≥ 100
+                            SYS ≥ 140 或 DIA ≥ 90
 
                         </div>
 
@@ -1277,9 +1267,11 @@
             class="toast"
             aria-live="polite">
 
-            <div class="toast-icon">
+            <div
+                class="toast-icon"
+                aria-hidden="true">
 
-                <svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+                ✓
 
             </div>
 
@@ -1409,8 +1401,8 @@
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="js/api.js?v=20260707-17"></script>
     <script src="js/history.js?v=20260710-caution-red"></script>
-    <script src="js/chart.js?v=20260710-caution-red"></script>
-    <script src="js/app.js?v=20260710-lcd-ocr-crops"></script>    
+    <script src="js/chart.js?v=20260710-threshold-zone"></script>
+    <script src="js/app.js?v=20260710-senior-feedback"></script>    
 
 </body>
 </html>

@@ -27,6 +27,8 @@ const App = {
 
         programmaticFocus: false,
 
+        toastTimer: null,
+
         userOptions: []
     
     },
@@ -1561,9 +1563,13 @@ const App = {
        Toast
     ========================================== */
 
-    showToast(message = "已儲存紀錄") {
+    showToast(message = "已儲存紀錄", type = "") {
 
         const text = this.elements.toast.querySelector(".toast-message");
+
+        const icon = this.elements.toast.querySelector(".toast-icon");
+
+        const resolvedType = type || this.getToastType(message);
 
         if(text){
 
@@ -1571,13 +1577,58 @@ const App = {
         
         }
 
-        this.elements.toast.classList.add("show");
+        if (icon) {
 
-        setTimeout(() => {
+            icon.textContent = resolvedType === "error"
+                ? "!"
+                : resolvedType === "info"
+                    ? "i"
+                    : "✓";
+
+        }
+
+        this.elements.toast.classList.remove(
+            "is-success",
+            "is-error",
+            "is-info"
+        );
+
+        this.elements.toast.classList.add(
+            "show",
+            `is-${resolvedType}`
+        );
+
+        if (this.state.toastTimer) {
+
+            clearTimeout(this.state.toastTimer);
+
+        }
+
+        this.state.toastTimer = setTimeout(() => {
 
             this.elements.toast.classList.remove("show");
 
-        }, 1200);
+            this.state.toastTimer = null;
+
+        }, 5000);
+
+    },
+
+    getToastType(message = "") {
+
+        if (/失敗|無法|錯誤|請重拍/.test(message)) {
+
+            return "error";
+
+        }
+
+        if (/請|注意/.test(message)) {
+
+            return "info";
+
+        }
+
+        return "success";
 
     },
     /* ==========================================
@@ -1614,30 +1665,18 @@ const App = {
 
                 }
 
-                // DIA / Pulse 自動跳轉
-                if (value.length >= 2) {
+                // DIA：1 開頭允許三位數，其他數字輸入兩位後跳轉
+                if (index === 1) {
 
-                    if (index === 0) {
-
-                        return;
-
-                    }
-
-                    if (index === 1 && this.state.diaManualEdit) {
+                    if (this.state.diaManualEdit) {
 
                         return;
 
                     }
 
-                    if (index === 1) {
+                    const diaLength = value.startsWith("1") ? 3 : 2;
 
-                        this.focusInput(index + 1);
-
-                        return;
-
-                    }
-
-                    if (index < inputs.length - 1) {
+                    if (value.length >= diaLength) {
 
                         this.focusInput(index + 1);
 
@@ -1935,6 +1974,8 @@ const App = {
 
         card.classList.add("error");
 
+        const errorId = `${input.id}-error`;
+
         let msg = card.querySelector(".error-message");
 
         if (!msg) {
@@ -1943,11 +1984,19 @@ const App = {
 
             msg.className = "error-message";
 
+            msg.id = errorId;
+
+            msg.setAttribute("role", "alert");
+
             card.appendChild(msg);
 
         }
 
         msg.textContent = message;
+
+        input.setAttribute("aria-invalid", "true");
+
+        input.setAttribute("aria-describedby", errorId);
 
         input.focus();
 
@@ -1962,6 +2011,14 @@ const App = {
         document.querySelectorAll(".bp-card").forEach(card => {
 
             card.classList.remove("error");
+
+        });
+
+        document.querySelectorAll(".bp-input").forEach(input => {
+
+            input.removeAttribute("aria-invalid");
+
+            input.removeAttribute("aria-describedby");
 
         });
 
@@ -2686,7 +2743,7 @@ const App = {
 
     getBpStatus(sys, dia) {
 
-        if (sys >= 160 || dia >= 100) {
+        if (sys >= 140 || dia >= 90) {
 
             return {
                 label: "二期",
@@ -2695,7 +2752,7 @@ const App = {
 
         }
 
-        if (sys < 160 && dia < 100 && (sys > 139 || dia > 89)) {
+        if (sys >= 130 || dia >= 80) {
 
             return {
                 label: "一期",
@@ -2704,10 +2761,10 @@ const App = {
 
         }
 
-        if (sys < 140 && dia < 90 && (sys > 120 || dia > 80)) {
+        if (sys >= 120) {
 
             return {
-                label: "前期",
+                label: "偏高",
                 className: "is-info"
             };
 

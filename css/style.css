@@ -606,7 +606,7 @@ body{
 
     display:grid;
 
-    grid-template-columns:repeat(2, minmax(0, 1fr));
+    grid-template-columns:minmax(0, 1fr);
 
     gap:12px;
 
@@ -618,7 +618,7 @@ body{
 
     min-height:64px;
 
-    padding:0;
+    padding:0 20px;
 
     border:none;
 
@@ -636,6 +636,8 @@ body{
 
     justify-content:center;
 
+    gap:10px;
+
     cursor:pointer;
 
     transition:
@@ -645,6 +647,14 @@ body{
         opacity .15s ease,
 
         box-shadow .18s ease;
+
+}
+
+.save-btn-label{
+
+    font-size:1.18rem;
+
+    font-weight:800;
 
 }
 
@@ -1283,17 +1293,17 @@ body{
 
 }
 
-.bp-card.error::after{
-
-    content:"請確認數值";
-
-    display:block;
+.error-message{
 
     margin-top:12px;
 
     color:var(--danger);
 
     font-size:.9rem;
+
+    font-weight:700;
+
+    text-align:center;
 
 }
 
@@ -1361,6 +1371,24 @@ body{
     transform:
         translate(-50%,-50%)
         scale(1);
+
+}
+
+.toast.is-success .toast-icon{
+
+    color:var(--success);
+
+}
+
+.toast.is-error .toast-icon{
+
+    color:#FF6961;
+
+}
+
+.toast.is-info .toast-icon{
+
+    color:#64B5FF;
 
 }
 
