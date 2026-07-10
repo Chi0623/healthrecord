@@ -982,6 +982,14 @@ const App = {
 
         }
 
+        if (this.ocr.templateImage && this.ocr.templateStep === "lcd") {
+
+            this.startOcrTemplateSetup();
+
+            return;
+
+        }
+
         this.captureOcrTemplateImage();
 
     },
@@ -1065,6 +1073,23 @@ const App = {
 
         if (!canvas || !this.ocr.templateImage) return;
 
+        const cvBest = this.findLcdWithOpenCv(canvas);
+
+        if (cvBest && cvBest.score >= .46) {
+
+            this.ocr.templateLcdCandidates = [cvBest];
+            this.ocr.templateLcdDetection = {
+                best: cvBest,
+                rejected: []
+            };
+            this.ocr.templateRects.lcd = cvBest.rect;
+            this.ocr.templateLcdConfirmPending = true;
+            this.setOcrTemplatePrimaryLabel("確認");
+
+            return;
+
+        }
+
         const analysis = this.findLcdCandidates(canvas);
         const best = analysis.candidates[0] || null;
 
@@ -1096,7 +1121,7 @@ const App = {
 
         delete this.ocr.templateRects.lcd;
         this.ocr.templateLcdConfirmPending = false;
-        this.setOcrTemplatePrimaryLabel("拍下");
+        this.setOcrTemplatePrimaryLabel("重拍");
 
     },
 
@@ -1382,6 +1407,15 @@ const App = {
 
         const fields = this.detectOcrTemplateNumberFields(rect);
 
+        if (!fields) {
+
+            this.showToast("找不到三組數字，請重拍");
+            this.updateOcrTemplateHint();
+
+            return;
+
+        }
+
         this.ocr.templateRects = {
             lcd: rect,
             sys: this.convertRectFromBase(fields.sys, rect),
@@ -1409,7 +1443,7 @@ const App = {
 
         if (!canvas || !this.ocr.templateImage) {
 
-            return this.getDefaultOcrTemplateFields();
+            return null;
 
         }
 
@@ -1547,7 +1581,7 @@ const App = {
 
         if (fields.length < 3) {
 
-            return this.getDefaultOcrTemplateFields();
+            return null;
 
         }
 
@@ -1619,31 +1653,6 @@ const App = {
 
     },
 
-    getDefaultOcrTemplateFields() {
-
-        return {
-            sys: {
-                x: .36,
-                y: .10,
-                width: .46,
-                height: .23
-            },
-            dia: {
-                x: .36,
-                y: .36,
-                width: .46,
-                height: .23
-            },
-            pulse: {
-                x: .40,
-                y: .62,
-                width: .38,
-                height: .22
-            }
-        };
-
-    },
-
     stopOcrTemplateCamera() {
 
         if (this.ocr.templateStream) {
@@ -1690,6 +1699,8 @@ const App = {
     startOcrTemplateDrag(event) {
 
         if (!this.ocr.templateImage) return;
+
+        if (this.ocr.templateStep === "lcd") return;
 
         event.preventDefault();
         this.elements.ocrTemplateCanvas.setPointerCapture(event.pointerId);
@@ -2123,7 +2134,7 @@ const App = {
             this.elements.ocrTemplateHint.textContent =
                 best && best.score >= .72
                     ? "已找到螢幕，請確認"
-                    : "找到可能的螢幕，請拖曳四角微調後確認";
+                    : "找到可能的螢幕，請確認或重拍";
 
             return;
 
@@ -2135,7 +2146,7 @@ const App = {
         ) {
 
             this.elements.ocrTemplateHint.textContent =
-                "找不到螢幕，請手動框選 LCD 螢幕範圍";
+                "找不到螢幕，請重拍";
 
             return;
 
@@ -2300,7 +2311,13 @@ const App = {
 
         try {
 
-            let values = await this.recognizeBloodPressureWithTemplate(source);
+            let values = await this.recognizeBloodPressureAutomatically(source);
+
+            if (!values) {
+
+                values = await this.recognizeBloodPressureWithTemplate(source);
+
+            }
 
             if (!values) {
 
@@ -2368,6 +2385,671 @@ const App = {
         );
 
         return result && result.data ? result.data.text : "";
+
+    },
+
+    async recognizeBloodPressureAutomatically(source) {
+
+        const bitmap =
+            this.isOcrBitmapSource(source)
+                ? source
+                : await this.loadOcrBitmap(source);
+        const lcd = this.detectLcdForOcr(bitmap);
+
+        if (!lcd || !lcd.canvas) {
+
+            return null;
+
+        }
+
+        const fields = this.detectDigitFieldsFromLcdCanvas(lcd.canvas);
+
+        if (!fields) {
+
+            return null;
+
+        }
+
+        const ranges = {
+            sys: [50, 280],
+            dia: [30, 180],
+            pulse: [30, 220]
+        };
+        const values = {};
+
+        for (const key of ["sys", "dia", "pulse"]) {
+
+            const value = await this.recognizeTemplateField(
+                lcd.canvas,
+                fields[key],
+                ranges[key]
+            );
+
+            if (!Number.isFinite(value)) {
+
+                return null;
+
+            }
+
+            values[key] = value;
+
+        }
+
+        return this.isOcrBloodPressureValid(
+            values.sys,
+            values.dia,
+            values.pulse
+        )
+            ? values
+            : null;
+
+    },
+
+    detectLcdForOcr(bitmap) {
+
+        const canvas = this.createBitmapCanvas(bitmap, 960);
+        const cvResult = this.findLcdWithOpenCv(canvas);
+
+        if (cvResult && cvResult.score >= .46) {
+
+            return {
+                ...cvResult,
+                canvas: this.createPerspectiveLcdCanvas(canvas, cvResult.corners)
+            };
+
+        }
+
+        const analysis = this.findLcdCandidates(canvas);
+        const best = analysis.candidates[0] || null;
+
+        if (!best || best.score < .46) {
+
+            return null;
+
+        }
+
+        return {
+            score: best.score,
+            rect: best.rect,
+            corners: this.rectToCorners(best.rect, canvas.width, canvas.height),
+            canvas: this.cropRectToCanvas(canvas, best.rect)
+        };
+
+    },
+
+    createBitmapCanvas(bitmap, maxLongSide = 1200) {
+
+        const scale = Math.min(
+            1,
+            maxLongSide / Math.max(bitmap.width, bitmap.height)
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+        canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+        return canvas;
+
+    },
+
+    findLcdWithOpenCv(canvas) {
+
+        if (!window.cv || typeof cv.imread !== "function") {
+
+            return null;
+
+        }
+
+        let src;
+        let gray;
+        let blurred;
+        let edges;
+        let contours;
+        let hierarchy;
+
+        try {
+
+            src = cv.imread(canvas);
+            gray = new cv.Mat();
+            blurred = new cv.Mat();
+            edges = new cv.Mat();
+            contours = new cv.MatVector();
+            hierarchy = new cv.Mat();
+
+            cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+            cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0);
+            cv.Canny(blurred, edges, 40, 130);
+            cv.findContours(
+                edges,
+                contours,
+                hierarchy,
+                cv.RETR_EXTERNAL,
+                cv.CHAIN_APPROX_SIMPLE
+            );
+
+            const candidates = [];
+
+            for (let i = 0; i < contours.size(); i += 1) {
+
+                const contour = contours.get(i);
+                const peri = cv.arcLength(contour, true);
+                const approx = new cv.Mat();
+
+                cv.approxPolyDP(contour, approx, peri * .035, true);
+
+                if (approx.rows === 4) {
+
+                    const points = [];
+
+                    for (let r = 0; r < 4; r += 1) {
+
+                        points.push({
+                            x: approx.intPtr(r, 0)[0],
+                            y: approx.intPtr(r, 0)[1]
+                        });
+
+                    }
+
+                    const candidate = this.scoreLcdQuadCandidate(
+                        points,
+                        canvas.width,
+                        canvas.height
+                    );
+
+                    if (candidate.score >= .24) {
+
+                        candidates.push(candidate);
+
+                    }
+
+                }
+
+                approx.delete();
+                contour.delete();
+
+            }
+
+            candidates.sort((a, b) => b.score - a.score);
+
+            return candidates[0] || null;
+
+        }
+
+        catch (err) {
+
+            console.warn("[OCR LCD OpenCV]", err);
+
+            return null;
+
+        }
+
+        finally {
+
+            [src, gray, blurred, edges, contours, hierarchy].forEach(mat => {
+
+                if (mat && typeof mat.delete === "function") {
+
+                    mat.delete();
+
+                }
+
+            });
+
+        }
+
+    },
+
+    scoreLcdQuadCandidate(points, width, height) {
+
+        const ordered = this.orderQuadPoints(points);
+        const topWidth = Math.hypot(
+            ordered.tr.x - ordered.tl.x,
+            ordered.tr.y - ordered.tl.y
+        );
+        const bottomWidth = Math.hypot(
+            ordered.br.x - ordered.bl.x,
+            ordered.br.y - ordered.bl.y
+        );
+        const leftHeight = Math.hypot(
+            ordered.bl.x - ordered.tl.x,
+            ordered.bl.y - ordered.tl.y
+        );
+        const rightHeight = Math.hypot(
+            ordered.br.x - ordered.tr.x,
+            ordered.br.y - ordered.tr.y
+        );
+        const quadWidth = (topWidth + bottomWidth) / 2;
+        const quadHeight = (leftHeight + rightHeight) / 2;
+        const area = this.polygonArea([
+            ordered.tl,
+            ordered.tr,
+            ordered.br,
+            ordered.bl
+        ]);
+        const areaRatio = area / Math.max(1, width * height);
+        const aspect = quadWidth / Math.max(1, quadHeight);
+        const centerX =
+            (ordered.tl.x + ordered.tr.x + ordered.br.x + ordered.bl.x) /
+            4 /
+            width;
+        const centerY =
+            (ordered.tl.y + ordered.tr.y + ordered.br.y + ordered.bl.y) /
+            4 /
+            height;
+        const parallelScore =
+            1 -
+            Math.min(
+                1,
+                (
+                    Math.abs(topWidth - bottomWidth) / Math.max(quadWidth, 1) +
+                    Math.abs(leftHeight - rightHeight) / Math.max(quadHeight, 1)
+                ) / 2
+            );
+        const score =
+            this.scoreSoftRange(areaRatio, .025, .55, .06, .32) * .25 +
+            this.scoreSoftRange(aspect, 1.05, 4.8, 1.45, 3.5) * .25 +
+            this.scoreSoftRange(centerX, .06, .94, .18, .82) * .12 +
+            this.scoreSoftRange(centerY, .06, .92, .16, .76) * .12 +
+            parallelScore * .26;
+
+        return {
+            score,
+            corners: ordered,
+            rect: {
+                x: Math.min(ordered.tl.x, ordered.bl.x) / width,
+                y: Math.min(ordered.tl.y, ordered.tr.y) / height,
+                width:
+                    (Math.max(ordered.tr.x, ordered.br.x) -
+                        Math.min(ordered.tl.x, ordered.bl.x)) /
+                    width,
+                height:
+                    (Math.max(ordered.bl.y, ordered.br.y) -
+                        Math.min(ordered.tl.y, ordered.tr.y)) /
+                    height
+            }
+        };
+
+    },
+
+    orderQuadPoints(points) {
+
+        const sorted = [...points].sort((a, b) => a.y - b.y);
+        const top = sorted.slice(0, 2).sort((a, b) => a.x - b.x);
+        const bottom = sorted.slice(2).sort((a, b) => a.x - b.x);
+
+        return {
+            tl: top[0],
+            tr: top[1],
+            bl: bottom[0],
+            br: bottom[1]
+        };
+
+    },
+
+    polygonArea(points) {
+
+        let area = 0;
+
+        points.forEach((point, index) => {
+
+            const next = points[(index + 1) % points.length];
+            area += point.x * next.y - next.x * point.y;
+
+        });
+
+        return Math.abs(area / 2);
+
+    },
+
+    createPerspectiveLcdCanvas(sourceCanvas, corners) {
+
+        if (!window.cv || typeof cv.imread !== "function" || !corners) {
+
+            return this.cropRectToCanvas(
+                sourceCanvas,
+                this.cornersToRect(corners, sourceCanvas.width, sourceCanvas.height)
+            );
+
+        }
+
+        const targetWidth = Math.max(
+            240,
+            Math.round(Math.max(
+                Math.hypot(corners.tr.x - corners.tl.x, corners.tr.y - corners.tl.y),
+                Math.hypot(corners.br.x - corners.bl.x, corners.br.y - corners.bl.y)
+            ))
+        );
+        const targetHeight = Math.max(
+            120,
+            Math.round(Math.max(
+                Math.hypot(corners.bl.x - corners.tl.x, corners.bl.y - corners.tl.y),
+                Math.hypot(corners.br.x - corners.tr.x, corners.br.y - corners.tr.y)
+            ))
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = targetWidth;
+        canvas.height = targetHeight;
+
+        let src;
+        let dst;
+        let srcTri;
+        let dstTri;
+        let matrix;
+
+        try {
+
+            src = cv.imread(sourceCanvas);
+            dst = new cv.Mat();
+            srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                corners.tl.x, corners.tl.y,
+                corners.tr.x, corners.tr.y,
+                corners.br.x, corners.br.y,
+                corners.bl.x, corners.bl.y
+            ]);
+            dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [
+                0, 0,
+                targetWidth - 1, 0,
+                targetWidth - 1, targetHeight - 1,
+                0, targetHeight - 1
+            ]);
+            matrix = cv.getPerspectiveTransform(srcTri, dstTri);
+            cv.warpPerspective(
+                src,
+                dst,
+                matrix,
+                new cv.Size(targetWidth, targetHeight),
+                cv.INTER_LINEAR,
+                cv.BORDER_REPLICATE
+            );
+            cv.imshow(canvas, dst);
+
+            return canvas;
+
+        }
+
+        catch (err) {
+
+            console.warn("[OCR LCD Warp]", err);
+
+            return this.cropRectToCanvas(
+                sourceCanvas,
+                this.cornersToRect(corners, sourceCanvas.width, sourceCanvas.height)
+            );
+
+        }
+
+        finally {
+
+            [src, dst, srcTri, dstTri, matrix].forEach(mat => {
+
+                if (mat && typeof mat.delete === "function") {
+
+                    mat.delete();
+
+                }
+
+            });
+
+        }
+
+    },
+
+    rectToCorners(rect, width, height) {
+
+        const x = rect.x * width;
+        const y = rect.y * height;
+        const right = x + rect.width * width;
+        const bottom = y + rect.height * height;
+
+        return {
+            tl: { x, y },
+            tr: { x: right, y },
+            br: { x: right, y: bottom },
+            bl: { x, y: bottom }
+        };
+
+    },
+
+    cornersToRect(corners, width, height) {
+
+        const xs = [corners.tl.x, corners.tr.x, corners.br.x, corners.bl.x];
+        const ys = [corners.tl.y, corners.tr.y, corners.br.y, corners.bl.y];
+        const left = Math.max(0, Math.min(...xs));
+        const top = Math.max(0, Math.min(...ys));
+        const right = Math.min(width, Math.max(...xs));
+        const bottom = Math.min(height, Math.max(...ys));
+
+        return {
+            x: left / width,
+            y: top / height,
+            width: (right - left) / width,
+            height: (bottom - top) / height
+        };
+
+    },
+
+    cropRectToCanvas(sourceCanvas, rect) {
+
+        const crop = this.rectToPixelCrop(
+            rect,
+            sourceCanvas.width,
+            sourceCanvas.height
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(crop.width));
+        canvas.height = Math.max(1, Math.round(crop.height));
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(
+            sourceCanvas,
+            crop.x,
+            crop.y,
+            crop.width,
+            crop.height,
+            0,
+            0,
+            canvas.width,
+            canvas.height
+        );
+
+        return canvas;
+
+    },
+
+    detectDigitFieldsFromLcdCanvas(lcdCanvas) {
+
+        const sampleWidth = 520;
+        const sampleHeight = Math.max(
+            180,
+            Math.round(lcdCanvas.height * sampleWidth / lcdCanvas.width)
+        );
+        const canvas = document.createElement("canvas");
+        canvas.width = sampleWidth;
+        canvas.height = sampleHeight;
+
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        ctx.drawImage(lcdCanvas, 0, 0, sampleWidth, sampleHeight);
+
+        const imageData = ctx.getImageData(0, 0, sampleWidth, sampleHeight);
+        const data = imageData.data;
+        const gray = new Uint8Array(sampleWidth * sampleHeight);
+        const histogram = new Array(256).fill(0);
+
+        for (let i = 0; i < gray.length; i += 1) {
+
+            const offset = i * 4;
+            const value = Math.round(
+                data[offset] * .299 +
+                data[offset + 1] * .587 +
+                data[offset + 2] * .114
+            );
+
+            gray[i] = value;
+            histogram[value] += 1;
+
+        }
+
+        const threshold = this.estimateDarkPixelThreshold(histogram, gray.length);
+        const groups = this.findDigitRowGroups(
+            gray,
+            threshold,
+            sampleWidth,
+            sampleHeight
+        );
+
+        if (groups.length < 3) {
+
+            return null;
+
+        }
+
+        const selected = groups
+            .sort((a, b) => b.score - a.score)
+            .slice(0, 3)
+            .sort((a, b) => a.rect.y - b.rect.y);
+
+        return {
+            sys: selected[0].rect,
+            dia: selected[1].rect,
+            pulse: selected[2].rect
+        };
+
+    },
+
+    estimateDarkPixelThreshold(histogram, total) {
+
+        let cumulative = 0;
+
+        for (let value = 0; value < histogram.length; value += 1) {
+
+            cumulative += histogram[value];
+
+            if (cumulative / total >= .22) {
+
+                return Math.max(42, Math.min(150, value + 12));
+
+            }
+
+        }
+
+        return 120;
+
+    },
+
+    findDigitRowGroups(gray, threshold, width, height) {
+
+        const startX = Math.round(width * .03);
+        const endX = Math.round(width * .98);
+        const rowCounts = new Array(height).fill(0);
+
+        for (let y = 0; y < height; y += 1) {
+
+            let count = 0;
+
+            for (let x = startX; x < endX; x += 1) {
+
+                const value = gray[y * width + x];
+
+                if (value <= threshold) {
+
+                    count += 1;
+
+                }
+
+            }
+
+            rowCounts[y] = count;
+
+        }
+
+        const smoothed = rowCounts.map((_, index) => {
+
+            let sum = 0;
+            let size = 0;
+
+            for (
+                let y = Math.max(0, index - 4);
+                y <= Math.min(height - 1, index + 4);
+                y += 1
+            ) {
+
+                sum += rowCounts[y];
+                size += 1;
+
+            }
+
+            return sum / size;
+
+        });
+        const maxRow = Math.max(...smoothed);
+        const activeThreshold = Math.max(7, maxRow * .18);
+        const bands = [];
+        let start = null;
+
+        smoothed.forEach((value, y) => {
+
+            if (value >= activeThreshold && start === null) {
+
+                start = y;
+
+            } else if (value < activeThreshold && start !== null) {
+
+                bands.push({ top: start, bottom: y - 1 });
+                start = null;
+
+            }
+
+        });
+
+        if (start !== null) {
+
+            bands.push({ top: start, bottom: height - 1 });
+
+        }
+
+        return this.mergeDigitBands(bands, height)
+            .map(band => this.createNumberFieldFromBand(
+                band,
+                gray,
+                threshold,
+                width,
+                height,
+                startX,
+                endX
+            ))
+            .filter(Boolean)
+            .filter(group => (
+                group.rect.width >= .14 &&
+                group.rect.height >= .055 &&
+                group.rect.height <= .32
+            ));
+
+    },
+
+    mergeDigitBands(bands, height) {
+
+        const merged = [];
+        const gapLimit = Math.max(4, Math.round(height * .025));
+
+        bands.forEach(band => {
+
+            const last = merged[merged.length - 1];
+
+            if (last && band.top - last.bottom <= gapLimit) {
+
+                last.bottom = band.bottom;
+
+            } else {
+
+                merged.push({ ...band });
+
+            }
+
+        });
+
+        return merged;
 
     },
 
