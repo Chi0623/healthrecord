@@ -3123,6 +3123,11 @@ body.is-keyboard-open .tabbar{
 
     gap:6px;
 
+    /* Prevent iOS Safari from treating a quick tap as a scroll/zoom gesture. */
+    touch-action:manipulation;
+
+    -webkit-tap-highlight-color:transparent;
+
 }
 
 .settings-user-option.active{
