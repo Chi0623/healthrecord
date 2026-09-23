@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC3
+   安心血壓 v1.0 RC4
    app.js
 ========================================================== */
 
@@ -1995,12 +1995,6 @@ const App = {
             this.localUserOptionsKey,
             this.themeKey
         ].forEach(key => localStorage.removeItem(key));
-
-        if (typeof clearApiDiagnostics === "function") {
-
-            clearApiDiagnostics();
-
-        }
 
         window.location.reload();
 

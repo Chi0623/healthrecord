@@ -1,5 +1,5 @@
 /* ==========================================================
-   安心血壓 v1.0 RC3
+   安心血壓 v1.0 RC4
    api.js
 ========================================================== */
 
@@ -15,6 +15,12 @@ const DEFAULT_API_URL =
 const API_DIAGNOSTIC_LOG_KEY = "bp-api-diagnostic-log";
 
 const API_DIAGNOSTIC_LOG_LIMIT = 50;
+
+const API_DIAGNOSTIC_BATCH_LIMIT = 20;
+
+const API_APP_VERSION = "v1.0 RC4";
+
+let apiDiagnosticFlushPromise = null;
 
 function createRequestId() {
 
@@ -74,7 +80,15 @@ function writeApiDiagnosticLog(entry) {
 
     const entries = readApiDiagnosticLog();
 
-    entries.push(entry);
+    const normalizedEntry = {
+        diagnosticId: entry.diagnosticId || createRequestId(),
+        source: "client",
+        appVersion: API_APP_VERSION,
+        synced: Boolean(entry.synced),
+        ...entry
+    };
+
+    entries.push(normalizedEntry);
 
     try {
 
@@ -89,7 +103,7 @@ function writeApiDiagnosticLog(entry) {
 
     }
 
-    console.info("[API Diagnostic]", entry);
+    console.info("[API Diagnostic]", normalizedEntry);
 
 }
 
@@ -102,6 +116,110 @@ function getApiDiagnostics() {
 function clearApiDiagnostics() {
 
     localStorage.removeItem(API_DIAGNOSTIC_LOG_KEY);
+
+}
+
+function getPendingApiDiagnostics() {
+
+    return readApiDiagnosticLog()
+        .filter(entry => !entry.synced && entry.diagnosticId)
+        .slice(0, API_DIAGNOSTIC_BATCH_LIMIT);
+
+}
+
+function markApiDiagnosticsSynced(diagnosticIds) {
+
+    const accepted = new Set(diagnosticIds || []);
+
+    if (!accepted.size) return;
+
+    const entries = readApiDiagnosticLog().map(entry => ({
+        ...entry,
+        synced: entry.synced || accepted.has(entry.diagnosticId)
+    }));
+
+    try {
+
+        localStorage.setItem(
+            API_DIAGNOSTIC_LOG_KEY,
+            JSON.stringify(entries.slice(-API_DIAGNOSTIC_LOG_LIMIT))
+        );
+
+    } catch (err) {
+
+        console.warn("[API Diagnostic] 無法更新同步狀態");
+
+    }
+
+}
+
+function scheduleApiDiagnosticFlush(apiUrl) {
+
+    if (typeof setTimeout !== "function") return;
+
+    setTimeout(() => {
+
+        flushApiDiagnostics(apiUrl);
+
+    }, 0);
+
+}
+
+async function flushApiDiagnostics(apiUrl = getApiUrl()) {
+
+    if (apiDiagnosticFlushPromise) return apiDiagnosticFlushPromise;
+
+    const pending = getPendingApiDiagnostics();
+    const url = String(apiUrl || "").trim();
+
+    if (!url || !pending.length) {
+
+        return {
+            success: true,
+            message: "沒有待上傳的診斷紀錄",
+            data: { acceptedIds: [] }
+        };
+
+    }
+
+    apiDiagnosticFlushPromise = (async () => {
+
+        const result = await apiRequest(
+            "writeDiagnostics",
+            { entries: JSON.stringify(pending) },
+            url,
+            { log: false, flush: false }
+        );
+
+        if (result.success) {
+
+            const acceptedIds = result.data && Array.isArray(result.data.acceptedIds)
+                ? result.data.acceptedIds
+                : pending.map(entry => entry.diagnosticId);
+
+            markApiDiagnosticsSynced(acceptedIds);
+
+            if (getPendingApiDiagnostics().length) {
+
+                scheduleApiDiagnosticFlush(url);
+
+            }
+
+        }
+
+        return result;
+
+    })();
+
+    try {
+
+        return await apiDiagnosticFlushPromise;
+
+    } finally {
+
+        apiDiagnosticFlushPromise = null;
+
+    }
 
 }
 
@@ -133,18 +251,28 @@ function logResponseDiagnostic(
 
 }
 
-async function parseApiResponse(response, requestId, action, startedAt) {
+async function parseApiResponse(
+    response,
+    requestId,
+    action,
+    startedAt,
+    shouldLog = true
+) {
 
     if (!response.ok) {
 
-        logResponseDiagnostic(
-            response,
-            requestId,
-            action,
-            startedAt,
-            "http-error",
-            `HTTP ${response.status} ${response.statusText}`.trim()
-        );
+        if (shouldLog) {
+
+            logResponseDiagnostic(
+                response,
+                requestId,
+                action,
+                startedAt,
+                "http-error",
+                `HTTP ${response.status} ${response.statusText}`.trim()
+            );
+
+        }
 
         throw new Error(`HTTP ${response.status}`);
 
@@ -159,27 +287,35 @@ async function parseApiResponse(response, requestId, action, startedAt) {
 
     } catch (err) {
 
-        logResponseDiagnostic(
-            response,
-            requestId,
-            action,
-            startedAt,
-            "json-error",
-            "回應不是有效的 JSON"
-        );
+        if (shouldLog) {
+
+            logResponseDiagnostic(
+                response,
+                requestId,
+                action,
+                startedAt,
+                "json-error",
+                "回應不是有效的 JSON"
+            );
+
+        }
 
         throw new Error("回應格式錯誤");
 
     }
 
-    logResponseDiagnostic(
-        response,
-        requestId,
-        action,
-        startedAt,
-        result.success ? "success" : "api-error",
-        result.success ? "" : result.message || "API 錯誤"
-    );
+    if (shouldLog) {
+
+        logResponseDiagnostic(
+            response,
+            requestId,
+            action,
+            startedAt,
+            result.success ? "success" : "api-error",
+            result.success ? "" : result.message || "API 錯誤"
+        );
+
+    }
 
     return result;
 
@@ -305,10 +441,17 @@ function normalizeRecordList(records) {
    共用 Request
 ========================================================== */
 
-async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
+async function apiRequest(
+    action,
+    data = {},
+    apiUrl = getApiUrl(),
+    options = {}
+) {
 
     const startedAt = Date.now();
     const requestId = String(data.requestId || createRequestId());
+    const shouldLog = options.log !== false;
+    const shouldFlush = options.flush !== false;
     let response = null;
 
     try {
@@ -355,18 +498,27 @@ async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
 
         });
 
-        return await parseApiResponse(
+        const result = await parseApiResponse(
             response,
             requestId,
             action,
-            startedAt
+            startedAt,
+            shouldLog
         );
+
+        if (result.success && shouldFlush && action !== "writeDiagnostics") {
+
+            scheduleApiDiagnosticFlush(url);
+
+        }
+
+        return result;
 
     }
 
     catch (err) {
 
-        if (!response) {
+        if (!response && shouldLog) {
 
             writeApiDiagnosticLog({
                 timestamp: new Date().toISOString(),

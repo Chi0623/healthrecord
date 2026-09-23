@@ -70,6 +70,8 @@ Google Sheet
 
 ```
 
+診斷流程：前端先將最近 50 次 API 結果保存在瀏覽器；連線成功後背景批次同步至 Google Sheet 的 `系統診斷` 分頁。Apps Script 也以同一個 RequestID 寫入請求結果，方便判斷問題發生在 Google 閘道、Apps Script 執行、工作表寫入或回應轉址階段。診斷同步是獨立的非阻塞流程，失敗時不得使主要 API 失敗。
+
 ---
 
 # 3. Frontend Architecture

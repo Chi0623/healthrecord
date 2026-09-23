@@ -1,11 +1,17 @@
 /* ==========================================================
-   安心血壓 v1.0 RC3
+   安心血壓 v1.0 RC4
    Google Apps Script
 ========================================================== */
 
 const CONFIG = {
 
     SHEET_NAME: "血壓紀錄",
+
+    DIAGNOSTIC_SHEET_NAME: "系統診斷",
+
+    DIAGNOSTIC_MAX_ROWS: 1000,
+
+    DIAGNOSTIC_BATCH_LIMIT: 20,
   
     TIMEZONE: Session.getScriptTimeZone()
   
@@ -28,6 +34,38 @@ const SHEET_HEADERS = [
   "IHB",
 
   "RecordID"
+
+];
+
+const DIAGNOSTIC_HEADERS = [
+
+  "接收時間",
+
+  "事件時間",
+
+  "DiagnosticID",
+
+  "RequestID",
+
+  "來源",
+
+  "動作",
+
+  "階段或結果",
+
+  "HTTP狀態",
+
+  "經過轉址",
+
+  "回應網域",
+
+  "回應格式",
+
+  "耗時ms",
+
+  "錯誤摘要",
+
+  "App版本"
 
 ];
   
@@ -94,6 +132,10 @@ const SHEET_HEADERS = [
         case "renameUser":
           result = renameUser(data);
           break;
+
+        case "writeDiagnostics":
+          result = writeDiagnostics(data);
+          break;
   
         default:
           result = errorResponse("未知的 API 動作");
@@ -104,6 +146,26 @@ const SHEET_HEADERS = [
         success: Boolean(result && result.success),
         durationMs: Date.now() - startedAt
       });
+
+      if (action !== "writeDiagnostics") {
+
+        const diagnosticStage = action === "saveRecord" && result && result.success
+          ? (result.data && result.data.duplicate
+            ? "DUPLICATE_FOUND"
+            : "ROW_APPENDED")
+          : "RESPONSE_CREATED";
+
+        persistServerDiagnosticSafe({
+          requestId: requestId,
+          action: action,
+          stage: diagnosticStage,
+          durationMs: Date.now() - startedAt,
+          error: result && result.success
+            ? ""
+            : String(result && result.message || "API 錯誤")
+        });
+
+      }
   
       return json(result);
   
@@ -113,6 +175,18 @@ const SHEET_HEADERS = [
         error: String(err.message || err.toString()).slice(0, 200),
         durationMs: Date.now() - startedAt
       });
+
+      if (action !== "writeDiagnostics") {
+
+        persistServerDiagnosticSafe({
+          requestId: requestId,
+          action: action,
+          stage: "FAILED",
+          durationMs: Date.now() - startedAt,
+          error: String(err.message || err.toString())
+        });
+
+      }
   
       return json(errorResponse(err.message || err.toString()));
   
@@ -322,6 +396,264 @@ const SHEET_HEADERS = [
     if (!matched) {
 
       headerRange.setValues([SHEET_HEADERS]);
+
+    }
+
+  }
+
+  /* ==========================================================
+     Diagnostics Sheet
+  ========================================================== */
+
+  function diagnosticSheet() {
+
+    const spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+
+    let ws = spreadsheet.getSheetByName(CONFIG.DIAGNOSTIC_SHEET_NAME);
+
+    if (!ws) {
+
+      ws = spreadsheet.insertSheet(CONFIG.DIAGNOSTIC_SHEET_NAME);
+
+    }
+
+    const headerRange = ws.getRange(1, 1, 1, DIAGNOSTIC_HEADERS.length);
+    const values = headerRange.getValues()[0];
+    const matched = DIAGNOSTIC_HEADERS.every(function(header, index) {
+
+      return String(values[index] || "").trim() === header;
+
+    });
+
+    if (!matched) {
+
+      headerRange.setValues([DIAGNOSTIC_HEADERS]);
+
+    }
+
+    return ws;
+
+  }
+
+  function sanitizeDiagnosticText(value, maxLength) {
+
+    let text = String(value === undefined || value === null ? "" : value)
+      .replace(/[\r\n\t]+/g, " ")
+      .trim()
+      .slice(0, maxLength);
+
+    if (/^[=+\-@]/.test(text)) {
+
+      text = "'" + text;
+
+    }
+
+    return text;
+
+  }
+
+  function normalizeDiagnosticNumber(value, minimum, maximum) {
+
+    const number = Number(value);
+
+    if (!Number.isFinite(number)) return "";
+
+    return Math.min(maximum, Math.max(minimum, Math.round(number)));
+
+  }
+
+  function normalizeClientDiagnostic(entry) {
+
+    if (!entry || typeof entry !== "object") {
+
+      throw new Error("診斷紀錄格式錯誤");
+
+    }
+
+    const diagnosticId = sanitizeDiagnosticText(entry.diagnosticId, 80);
+
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(diagnosticId)) {
+
+      throw new Error("DiagnosticID 格式錯誤");
+
+    }
+
+    const timestamp = sanitizeDiagnosticText(entry.timestamp, 40);
+
+    return {
+      diagnosticId: diagnosticId,
+      row: [
+        new Date(),
+        timestamp,
+        diagnosticId,
+        sanitizeDiagnosticText(entry.requestId, 80),
+        "client",
+        sanitizeDiagnosticText(entry.action, 40),
+        sanitizeDiagnosticText(entry.outcome, 40),
+        normalizeDiagnosticNumber(entry.status, 0, 599),
+        entry.redirected === true ? true : false,
+        sanitizeDiagnosticText(entry.responseHost, 120),
+        sanitizeDiagnosticText(entry.responseFormat, 80),
+        normalizeDiagnosticNumber(entry.durationMs, 0, 300000),
+        sanitizeDiagnosticText(entry.error, 200),
+        sanitizeDiagnosticText(entry.appVersion, 40)
+      ]
+    };
+
+  }
+
+  function appendDiagnosticRows(items) {
+
+    const ws = diagnosticSheet();
+    const lastRow = ws.getLastRow();
+    const existingIds = new Set();
+
+    if (lastRow > 1) {
+
+      ws.getRange(2, 3, lastRow - 1, 1)
+        .getValues()
+        .forEach(function(row) {
+
+          existingIds.add(String(row[0] || ""));
+
+        });
+
+    }
+
+    const rows = [];
+    const acceptedIds = [];
+
+    items.forEach(function(item) {
+
+      acceptedIds.push(item.diagnosticId);
+
+      if (existingIds.has(item.diagnosticId)) return;
+
+      existingIds.add(item.diagnosticId);
+      rows.push(item.row);
+
+    });
+
+    if (rows.length) {
+
+      ws.getRange(
+        ws.getLastRow() + 1,
+        1,
+        rows.length,
+        DIAGNOSTIC_HEADERS.length
+      ).setValues(rows);
+
+    }
+
+    const dataRowCount = Math.max(0, ws.getLastRow() - 1);
+    const overflow = dataRowCount - CONFIG.DIAGNOSTIC_MAX_ROWS;
+
+    if (overflow > 0) {
+
+      ws.deleteRows(2, overflow);
+
+    }
+
+    return {
+      acceptedIds: acceptedIds,
+      insertedCount: rows.length
+    };
+
+  }
+
+  function writeDiagnostics(data) {
+
+    let entries;
+
+    try {
+
+      entries = typeof data.entries === "string"
+        ? JSON.parse(data.entries)
+        : data.entries;
+
+    } catch (err) {
+
+      throw new Error("診斷紀錄不是有效的 JSON");
+
+    }
+
+    if (!Array.isArray(entries) || !entries.length) {
+
+      throw new Error("沒有診斷紀錄");
+
+    }
+
+    if (entries.length > CONFIG.DIAGNOSTIC_BATCH_LIMIT) {
+
+      throw new Error("單次診斷紀錄不可超過 20 筆");
+
+    }
+
+    const items = entries.map(normalizeClientDiagnostic);
+    const lock = LockService.getDocumentLock();
+
+    lock.waitLock(3000);
+
+    try {
+
+      const result = appendDiagnosticRows(items);
+
+      return successResponse("診斷紀錄已同步", result);
+
+    } finally {
+
+      lock.releaseLock();
+
+    }
+
+  }
+
+  function persistServerDiagnosticSafe(details) {
+
+    try {
+
+      const timestamp = new Date();
+      const requestId = sanitizeDiagnosticText(details.requestId, 80);
+      const stage = sanitizeDiagnosticText(details.stage, 40);
+      const diagnosticId = sanitizeDiagnosticText(
+        requestId + "-server-" + stage,
+        180
+      );
+      const lock = LockService.getDocumentLock();
+
+      lock.waitLock(3000);
+
+      try {
+
+        appendDiagnosticRows([{
+          diagnosticId: diagnosticId,
+          row: [
+            timestamp,
+            timestamp.toISOString(),
+            diagnosticId,
+            requestId,
+            "server",
+            sanitizeDiagnosticText(details.action, 40),
+            stage,
+            "",
+            "",
+            "",
+            "application/json",
+            normalizeDiagnosticNumber(details.durationMs, 0, 300000),
+            sanitizeDiagnosticText(details.error, 200),
+            "v1.0 RC4"
+          ]
+        }]);
+
+      } finally {
+
+        lock.releaseLock();
+
+      }
+
+    } catch (err) {
+
+      console.error("[Diagnostic Sheet] " + String(err.message || err));
 
     }
 

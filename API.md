@@ -40,6 +40,7 @@ Error:
 - `getTrend()`
 - `getUsers()`
 - `renameUser()`
+- `writeDiagnostics()`
 
 ## getUsers()
 
@@ -131,7 +132,9 @@ Response:
 
 ## API 診斷紀錄
 
-前端在瀏覽器本機保存最近 50 次 API 結果，欄位包含時間、`requestId`、動作、結果類型、HTTP 狀態、是否轉址、最終回應網域、回應格式與耗時。紀錄不包含姓名、量測值或完整 Apps Script 網址。
+前端在瀏覽器本機保存最近 50 次 API 結果，欄位包含時間、`diagnosticId`、`requestId`、動作、結果類型、HTTP 狀態、是否轉址、最終回應網域、回應格式與耗時。紀錄不包含姓名、量測值或完整 Apps Script 網址。
+
+未同步的紀錄會在下一次 API 成功後，以最多 20 筆為一批呼叫 `writeDiagnostics()`，寫入 Google Sheet 的「系統診斷」分頁。上傳本身不再產生診斷紀錄，以免遞迴；上傳失敗也不影響原本的讀取或血壓存檔。
 
 可在瀏覽器開發工具使用：
 
@@ -141,6 +144,12 @@ clearApiDiagnostics()
 ```
 
 Apps Script 使用相同 `requestId` 輸出結構化執行紀錄，包括 `REQUEST_RECEIVED`、`VALIDATED`、`DUPLICATE_FOUND`、`ROW_APPENDED`、`RESPONSE_CREATED` 與 `FAILED`。
+
+## writeDiagnostics()
+
+批次保存瀏覽器端的非敏感診斷紀錄。`entries` 是 JSON 字串，單次最多 20 筆；Apps Script 以 `diagnosticId` 去重。
+
+Google Sheet 最多保留 1000 筆診斷資料，超過時刪除最舊資料。診斷資料不得包含姓名、血壓、脈搏、完整 Apps Script 網址或部署 ID。
 
 ## updateRecord()
 

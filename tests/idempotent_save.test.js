@@ -4,12 +4,14 @@ const assert = require("assert");
 const fs = require("fs");
 const vm = require("vm");
 
-function createSheet() {
+const MAIN_HEADERS = [
+    "姓名", "日期", "時間", "SYS",
+    "DIA", "Pulse", "IHB", "RecordID"
+];
 
-    const rows = [[
-        "姓名", "日期", "時間", "SYS",
-        "DIA", "Pulse", "IHB", "RecordID"
-    ]];
+function createSheet(headers = []) {
+
+    const rows = [headers.slice()];
 
     return {
         rows,
@@ -41,14 +43,18 @@ function createSheet() {
         },
         appendRow(row) {
             rows.push(row.slice());
+        },
+        deleteRows(start, count) {
+            rows.splice(start - 1, count);
         }
     };
 
 }
 
-function loadAppsScript() {
+function loadAppsScript(options = {}) {
 
-    const sheet = createSheet();
+    const sheet = createSheet(MAIN_HEADERS);
+    const sheets = new Map([["血壓紀錄", sheet]]);
     const logs = [];
     let uuid = 0;
 
@@ -56,7 +62,15 @@ function loadAppsScript() {
         Session: { getScriptTimeZone: () => "Asia/Taipei" },
         SpreadsheetApp: {
             getActiveSpreadsheet: () => ({
-                getSheetByName: () => sheet
+                getSheetByName: name => sheets.get(name) || null,
+                insertSheet: name => {
+                    if (options.failDiagnosticSheet && name === "系統診斷") {
+                        throw new Error("diagnostic sheet unavailable");
+                    }
+                    const created = createSheet();
+                    sheets.set(name, created);
+                    return created;
+                }
             })
         },
         LockService: {
@@ -66,7 +80,8 @@ function loadAppsScript() {
             })
         },
         Utilities: {
-            getUuid: () => `server-id-${++uuid}`,
+            getUuid: () =>
+                `00000000-0000-4000-8000-${String(++uuid).padStart(12, "0")}`,
             formatDate: (date, timezone, format) =>
                 format === "yyyy-MM-dd" ? "2026-09-23" : "12:00:00"
         },
@@ -78,14 +93,15 @@ function loadAppsScript() {
             })
         },
         console: {
-            log: value => logs.push(JSON.parse(value))
+            log: value => logs.push(JSON.parse(value)),
+            error: value => logs.push({ consoleError: value })
         }
     };
 
     vm.createContext(context);
     vm.runInContext(fs.readFileSync("Code.gs", "utf8"), context);
 
-    return { context, sheet, logs };
+    return { context, sheet, sheets, logs };
 
 }
 
@@ -103,7 +119,7 @@ function createLocalStorage() {
 
 async function testAppsScriptIdempotency() {
 
-    const { context, sheet, logs } = loadAppsScript();
+    const { context, sheet, sheets, logs } = loadAppsScript();
     const record = {
         id: "11111111-1111-4111-8111-111111111111",
         requestId: "11111111-1111-4111-8111-111111111111",
@@ -146,6 +162,84 @@ async function testAppsScriptIdempotency() {
         entry.requestId === record.requestId &&
         entry.stage === "RESPONSE_CREATED"
     ));
+    assert(sheets.get("系統診斷").rows.some(row =>
+        row[3] === record.requestId && row[6] === "DUPLICATE_FOUND"
+    ));
+
+}
+
+async function testAppsScriptDiagnostics() {
+
+    const { context, sheets } = loadAppsScript();
+    const diagnostic = {
+        diagnosticId: "33333333-3333-4333-8333-333333333333",
+        timestamp: "2026-09-23T14:02:26.379Z",
+        requestId: "44444444-4444-4444-8444-444444444444",
+        action: "saveRecord",
+        outcome: "http-error",
+        status: 404,
+        redirected: true,
+        responseHost: "script.googleusercontent.com",
+        responseFormat: "text/html",
+        durationMs: 1234,
+        error: "HTTP 404",
+        appVersion: "v1.0 RC4",
+        user: "不得寫入的人名",
+        sys: 120
+    };
+
+    const first = context.writeDiagnostics({
+        entries: JSON.stringify([diagnostic])
+    });
+    const retry = context.writeDiagnostics({
+        entries: JSON.stringify([diagnostic])
+    });
+    const diagnosticSheet = sheets.get("系統診斷");
+
+    assert.strictEqual(first.success, true);
+    assert.strictEqual(first.data.insertedCount, 1);
+    assert.strictEqual(retry.data.insertedCount, 0);
+    assert.strictEqual(diagnosticSheet.rows.length, 2);
+    assert(!diagnosticSheet.rows[1].includes("不得寫入的人名"));
+    assert(!diagnosticSheet.rows[1].includes(120));
+
+    for (let index = 0; index < 1000; index += 1) {
+        diagnosticSheet.rows.push([
+            new Date(), "", `old-${index}`, "", "client", "", "", "",
+            "", "", "", "", "", ""
+        ]);
+    }
+
+    const next = {
+        ...diagnostic,
+        diagnosticId: "55555555-5555-4555-8555-555555555555"
+    };
+
+    context.writeDiagnostics({ entries: JSON.stringify([next]) });
+
+    assert.strictEqual(diagnosticSheet.rows.length, 1001);
+    assert.strictEqual(
+        diagnosticSheet.rows[1000][2],
+        "55555555-5555-4555-8555-555555555555"
+    );
+
+    const isolated = loadAppsScript({ failDiagnosticSheet: true });
+    const response = isolated.context.doPost({
+        parameter: {
+            action: "saveRecord",
+            id: "66666666-6666-4666-8666-666666666666",
+            requestId: "66666666-6666-4666-8666-666666666666",
+            user: "測試者",
+            sys: "120",
+            dia: "80",
+            pulse: "70",
+            ihb: "false"
+        },
+        postData: { contents: "action=saveRecord" }
+    });
+
+    assert.strictEqual(JSON.parse(response.value).success, true);
+    assert.strictEqual(isolated.sheet.rows.length, 2);
 
 }
 
@@ -158,6 +252,7 @@ async function testBrowserDiagnostics() {
     );
     let uuid = 0;
     const requests = [];
+    const scheduledFlushes = [];
     const responses = [
         {
             ok: true,
@@ -182,6 +277,22 @@ async function testBrowserDiagnostics() {
             url: "https://script.googleusercontent.com/macros/echo",
             headers: { get: () => "text/html" },
             text: async () => "not used"
+        },
+        {
+            ok: true,
+            status: 200,
+            statusText: "OK",
+            redirected: true,
+            url: "https://script.googleusercontent.com/macros/echo",
+            headers: { get: () => "application/json; charset=utf-8" },
+            text: async () => JSON.stringify({
+                success: true,
+                message: "診斷紀錄已同步",
+                data: {
+                    acceptedIds: context.getPendingApiDiagnostics()
+                        .map(entry => entry.diagnosticId)
+                }
+            })
         }
     ];
 
@@ -195,6 +306,7 @@ async function testBrowserDiagnostics() {
         localStorage,
         URL,
         URLSearchParams,
+        setTimeout: callback => scheduledFlushes.push(callback),
         console: {
             info() {},
             warn() {},
@@ -223,6 +335,7 @@ async function testBrowserDiagnostics() {
         new URLSearchParams(requests[0].body).get("requestId"),
         "22222222-2222-4222-8222-222222222222"
     );
+    assert.strictEqual(scheduledFlushes.length, 1);
 
     const failed = await context.apiRequest(
         "getUsers",
@@ -243,6 +356,17 @@ async function testBrowserDiagnostics() {
     );
     assert.strictEqual(diagnostics.length, 2);
 
+    const flushed = await context.flushApiDiagnostics();
+    const diagnosticPayload = new URLSearchParams(requests[2].body);
+    const uploadedEntries = JSON.parse(diagnosticPayload.get("entries"));
+
+    assert.strictEqual(flushed.success, true);
+    assert.strictEqual(diagnosticPayload.get("action"), "writeDiagnostics");
+    assert.strictEqual(context.getPendingApiDiagnostics().length, 0);
+    assert(uploadedEntries.every(entry => !Object.hasOwn(entry, "user")));
+    assert(uploadedEntries.every(entry => !Object.hasOwn(entry, "sys")));
+    assert(uploadedEntries.every(entry => !Object.hasOwn(entry, "dia")));
+
     for (let index = 0; index < 55; index += 1) {
         context.writeApiDiagnosticLog({ index });
     }
@@ -253,6 +377,7 @@ async function testBrowserDiagnostics() {
 
 Promise.resolve()
     .then(testAppsScriptIdempotency)
+    .then(testAppsScriptDiagnostics)
     .then(testBrowserDiagnostics)
     .then(() => console.log("idempotent save tests passed"))
     .catch(error => {
