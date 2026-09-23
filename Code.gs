@@ -36,6 +36,15 @@ const SHEET_HEADERS = [
   ========================================================== */
   
   function doPost(e) {
+
+    const startedAt = Date.now();
+    let data = {};
+    let requestId = getRequestIdFromEvent(e);
+    let action = "unknown";
+
+    logApiEvent("REQUEST_RECEIVED", requestId, action, {
+      durationMs: 0
+    });
   
     try {
   
@@ -45,7 +54,10 @@ const SHEET_HEADERS = [
   
       }
   
-      const data = parseRequestData(e);
+      data = parseRequestData(e);
+
+      requestId = normalizeRequestId(data.requestId || requestId);
+      action = String(data.action || "unknown");
   
       let result;
   
@@ -87,15 +99,80 @@ const SHEET_HEADERS = [
           result = errorResponse("未知的 API 動作");
   
       }
+
+      logApiEvent("RESPONSE_CREATED", requestId, action, {
+        success: Boolean(result && result.success),
+        durationMs: Date.now() - startedAt
+      });
   
       return json(result);
   
     } catch (err) {
+
+      logApiEvent("FAILED", requestId, action, {
+        error: String(err.message || err.toString()).slice(0, 200),
+        durationMs: Date.now() - startedAt
+      });
   
       return json(errorResponse(err.message || err.toString()));
   
     }
   
+  }
+
+  function getRequestIdFromEvent(e) {
+
+    const parameterValue = e && e.parameter
+      ? e.parameter.requestId
+      : "";
+
+    if (parameterValue) {
+
+      return normalizeRequestId(parameterValue);
+
+    }
+
+    const raw = e && e.postData
+      ? String(e.postData.contents || "").trim()
+      : "";
+
+    if (raw.charAt(0) === "{") {
+
+      try {
+
+        return normalizeRequestId(JSON.parse(raw).requestId);
+
+      } catch (err) {
+
+        // Malformed JSON is handled by parseRequestData().
+
+      }
+
+    }
+
+    return normalizeRequestId("");
+
+  }
+
+  function normalizeRequestId(value) {
+
+    const requestId = String(value || "").trim();
+
+    return requestId || "server-" + Utilities.getUuid();
+
+  }
+
+  function logApiEvent(stage, requestId, action, details) {
+
+    const entry = Object.assign({
+      timestamp: new Date().toISOString(),
+      requestId: normalizeRequestId(requestId),
+      action: String(action || "unknown"),
+      stage: String(stage || "UNKNOWN")
+    }, details || {});
+
+    console.log(JSON.stringify(entry));
+
   }
 
   function parseRequestData(e) {
@@ -505,6 +582,71 @@ const SHEET_HEADERS = [
 
   }
 
+  function isSameRecordContent(existing, record) {
+
+    return (
+      String(existing.user) === String(record.user) &&
+      Number(existing.sys) === Number(record.sys) &&
+      Number(existing.dia) === Number(record.dia) &&
+      Number(existing.pulse) === Number(record.pulse) &&
+      Boolean(existing.ihb) === Boolean(record.ihb)
+    );
+
+  }
+
+  function normalizeRecordId(value) {
+
+    const id = String(value || "").trim();
+
+    if (!id) {
+
+      return "";
+
+    }
+
+    const uuidPattern =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+    if (!uuidPattern.test(id)) {
+
+      throw new Error("紀錄 ID 格式錯誤");
+
+    }
+
+    return id;
+
+  }
+
+  function findRecordById(ws, id) {
+
+    const lastRow = ws.getLastRow();
+
+    if (lastRow <= 1) {
+
+      return null;
+
+    }
+
+    const ids = ws
+      .getRange(2, SHEET_HEADERS.length, lastRow - 1, 1)
+      .getValues();
+
+    for (let i = 0; i < ids.length; i++) {
+
+      if (String(ids[i][0]) !== String(id)) continue;
+
+      const row = ws
+        .getRange(i + 2, 1, 1, SHEET_HEADERS.length)
+        .getValues()[0];
+
+      return readRowRecord(row);
+
+    }
+
+    return null;
+
+  }
+
   /* ==========================================================
      Validation
   ========================================================== */
@@ -615,7 +757,31 @@ const SHEET_HEADERS = [
 
       const record = validateRecordInput(data);
   
-      const id = Utilities.getUuid();
+      const id = normalizeRecordId(data.id || data.requestId) ||
+        Utilities.getUuid();
+
+      record.id = id;
+
+      logApiEvent("VALIDATED", data.requestId || id, "saveRecord");
+
+      const existing = findRecordById(ws, id);
+
+      if (existing) {
+
+        if (!isSameRecordContent(existing, record)) {
+
+          throw new Error("紀錄識別碼重複，內容不一致");
+
+        }
+
+        logApiEvent("DUPLICATE_FOUND", data.requestId || id, "saveRecord");
+
+        return successResponse("紀錄已儲存", {
+          id: id,
+          duplicate: true
+        });
+
+      }
   
       const now = new Date();
 
@@ -632,10 +798,13 @@ const SHEET_HEADERS = [
           now
         )
       );
+
+      logApiEvent("ROW_APPENDED", data.requestId || id, "saveRecord");
   
       return successResponse("儲存成功", {
 
-        id
+        id: id,
+        duplicate: false
 
       });
   

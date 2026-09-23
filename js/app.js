@@ -19,6 +19,8 @@ const App = {
     
         saving: false,
 
+        pendingSave: null,
+
         editingId: null,
 
         diaManualEdit: false,
@@ -1994,6 +1996,12 @@ const App = {
             this.themeKey
         ].forEach(key => localStorage.removeItem(key));
 
+        if (typeof clearApiDiagnostics === "function") {
+
+            clearApiDiagnostics();
+
+        }
+
         window.location.reload();
 
     },
@@ -2697,7 +2705,7 @@ const App = {
             // ===== 新增模式 =====
             else {
 
-                result = await saveRecord({
+                const saveData = {
 
                     user,
 
@@ -2709,11 +2717,35 @@ const App = {
 
                     ihb: data.ihb
 
+                };
+
+                const signature = JSON.stringify(saveData);
+
+                if (
+                    !this.state.pendingSave ||
+                    this.state.pendingSave.signature !== signature
+                ) {
+
+                    this.state.pendingSave = {
+                        id: createRequestId(),
+                        signature
+                    };
+
+                }
+
+                result = await saveRecord({
+
+                    ...saveData,
+
+                    id: this.state.pendingSave.id
+
                 });
 
             }
 
             if (result.success) {
+
+                this.state.pendingSave = null;
 
                 // 修改完成後離開編輯模式
                 this.state.editingId = null;

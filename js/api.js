@@ -12,6 +12,179 @@
 const DEFAULT_API_URL =
     "";
 
+const API_DIAGNOSTIC_LOG_KEY = "bp-api-diagnostic-log";
+
+const API_DIAGNOSTIC_LOG_LIMIT = 50;
+
+function createRequestId() {
+
+    if (window.crypto && typeof window.crypto.randomUUID === "function") {
+
+        return window.crypto.randomUUID();
+
+    }
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+        /[xy]/g,
+        character => {
+
+            const random = Math.floor(Math.random() * 16);
+            const value = character === "x" ? random : (random & 0x3) | 0x8;
+
+            return value.toString(16);
+
+        }
+    );
+
+}
+
+function getUrlHost(value) {
+
+    try {
+
+        return new URL(String(value || "")).host;
+
+    } catch (err) {
+
+        return "";
+
+    }
+
+}
+
+function readApiDiagnosticLog() {
+
+    try {
+
+        const entries = JSON.parse(
+            localStorage.getItem(API_DIAGNOSTIC_LOG_KEY) || "[]"
+        );
+
+        return Array.isArray(entries) ? entries : [];
+
+    } catch (err) {
+
+        return [];
+
+    }
+
+}
+
+function writeApiDiagnosticLog(entry) {
+
+    const entries = readApiDiagnosticLog();
+
+    entries.push(entry);
+
+    try {
+
+        localStorage.setItem(
+            API_DIAGNOSTIC_LOG_KEY,
+            JSON.stringify(entries.slice(-API_DIAGNOSTIC_LOG_LIMIT))
+        );
+
+    } catch (err) {
+
+        console.warn("[API Diagnostic] 無法寫入本機紀錄");
+
+    }
+
+    console.info("[API Diagnostic]", entry);
+
+}
+
+function getApiDiagnostics() {
+
+    return readApiDiagnosticLog();
+
+}
+
+function clearApiDiagnostics() {
+
+    localStorage.removeItem(API_DIAGNOSTIC_LOG_KEY);
+
+}
+
+function logResponseDiagnostic(
+    response,
+    requestId,
+    action,
+    startedAt,
+    outcome,
+    error = ""
+) {
+
+    const contentType = String(
+        response.headers.get("content-type") || ""
+    ).split(";")[0];
+
+    writeApiDiagnosticLog({
+        timestamp: new Date().toISOString(),
+        requestId,
+        action,
+        outcome,
+        status: response.status,
+        redirected: response.redirected,
+        responseHost: getUrlHost(response.url),
+        responseFormat: contentType,
+        error: String(error || "").slice(0, 160),
+        durationMs: Date.now() - startedAt
+    });
+
+}
+
+async function parseApiResponse(response, requestId, action, startedAt) {
+
+    if (!response.ok) {
+
+        logResponseDiagnostic(
+            response,
+            requestId,
+            action,
+            startedAt,
+            "http-error",
+            `HTTP ${response.status} ${response.statusText}`.trim()
+        );
+
+        throw new Error(`HTTP ${response.status}`);
+
+    }
+
+    const responseText = await response.text();
+    let result;
+
+    try {
+
+        result = JSON.parse(responseText);
+
+    } catch (err) {
+
+        logResponseDiagnostic(
+            response,
+            requestId,
+            action,
+            startedAt,
+            "json-error",
+            "回應不是有效的 JSON"
+        );
+
+        throw new Error("回應格式錯誤");
+
+    }
+
+    logResponseDiagnostic(
+        response,
+        requestId,
+        action,
+        startedAt,
+        result.success ? "success" : "api-error",
+        result.success ? "" : result.message || "API 錯誤"
+    );
+
+    return result;
+
+}
+
 function getApiUrl() {
 
     const saved = String(localStorage.getItem("bp-api-url") || "").trim();
@@ -134,13 +307,25 @@ function normalizeRecordList(records) {
 
 async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
 
+    const startedAt = Date.now();
+    const requestId = String(data.requestId || createRequestId());
+    let response = null;
+
     try {
 
         const payload = new URLSearchParams();
 
         payload.append("action", action);
 
+        payload.append("requestId", requestId);
+
         Object.keys(data).forEach(key => {
+
+            if (key === "requestId") {
+
+                return;
+
+            }
 
             const value = data[key];
 
@@ -162,7 +347,7 @@ async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
 
         }
 
-        const response = await fetch(url, {
+        response = await fetch(url, {
 
             method: "POST",
 
@@ -170,21 +355,33 @@ async function apiRequest(action, data = {}, apiUrl = getApiUrl()) {
 
         });
 
-        if (!response.ok) {
-
-            throw new Error(
-
-                `HTTP ${response.status}`
-
-            );
-
-        }
-
-        return await response.json();
+        return await parseApiResponse(
+            response,
+            requestId,
+            action,
+            startedAt
+        );
 
     }
 
     catch (err) {
+
+        if (!response) {
+
+            writeApiDiagnosticLog({
+                timestamp: new Date().toISOString(),
+                requestId,
+                action,
+                outcome: "network-error",
+                status: 0,
+                redirected: false,
+                responseHost: "",
+                responseFormat: "",
+                error: String(err.message || "網路錯誤").slice(0, 160),
+                durationMs: Date.now() - startedAt
+            });
+
+        }
 
         console.error(
 
@@ -218,7 +415,10 @@ async function saveRecord(record) {
 
         "saveRecord",
 
-        record
+        {
+            ...record,
+            requestId: record.id
+        }
 
     );
 
